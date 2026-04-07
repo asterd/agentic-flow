@@ -1,0 +1,24 @@
+2026-04-04 19:14:32.170 [info] Extension host with pid 96255 started
+2026-04-04 19:14:32.170 [info] Skipping acquiring lock for /Users/ddurzo/Development/misc/agentic-flow/.vscode-test/user-data/User/workspaceStorage/76ff3cbd6d6045a237ddfeb0af6edfb2.
+2026-04-04 19:14:32.181 [info] ExtensionService#_doActivateExtension vscode.github-authentication, startup: false, activationEvent: 'onAuthenticationRequest:github'
+2026-04-04 19:14:32.193 [info] ExtensionService#_doActivateExtension vscode.emmet, startup: false, activationEvent: 'onLanguage'
+2026-04-04 19:14:32.245 [info] ExtensionService#_doActivateExtension vscode.git-base, startup: true, activationEvent: '*', root cause: vscode.git
+2026-04-04 19:14:32.246 [info] ExtensionService#_doActivateExtension vscode.npm, startup: true, activationEvent: 'workspaceContains:package.json'
+2026-04-04 19:14:32.259 [info] ExtensionService#_doActivateExtension vscode.git, startup: true, activationEvent: '*'
+2026-04-04 19:14:32.283 [info] ExtensionService#_doActivateExtension vscode.github, startup: true, activationEvent: '*'
+2026-04-04 19:14:32.344 [warning] [vscode.git] Accessing a resource scoped configuration without providing a resource is not expected. To get the effective value for 'git.openRepositoryInParentFolders', provide the URI of a resource or 'null' for any resource.
+2026-04-04 19:14:32.344 [warning] [vscode.git] Accessing a resource scoped configuration without providing a resource is not expected. To get the effective value for 'git.showProgress', provide the URI of a resource or 'null' for any resource.
+2026-04-04 19:14:32.351 [info] Eager extensions activated
+2026-04-04 19:14:32.358 [info] ExtensionService#_doActivateExtension vscode.debug-auto-launch, startup: false, activationEvent: 'onStartupFinished'
+2026-04-04 19:14:32.359 [info] ExtensionService#_doActivateExtension vscode.merge-conflict, startup: false, activationEvent: 'onStartupFinished'
+2026-04-04 19:14:37.445 [info] ExtensionService#_doActivateExtension vscode.configuration-editing, startup: false, activationEvent: 'onLanguage:json'
+2026-04-04 19:14:37.448 [info] ExtensionService#_doActivateExtension vscode.extension-editing, startup: false, activationEvent: 'onLanguage:json'
+2026-04-04 19:14:37.453 [info] ExtensionService#_doActivateExtension vscode.json-language-features, startup: false, activationEvent: 'onLanguage:json'
+2026-04-04 19:14:37.605 [warning] Accessing a resource scoped configuration without providing a resource is not expected. To get the effective value for 'files.watcherExclude', provide the URI of a resource or 'null' for any resource.
+2026-04-04 19:15:19.641 [info] ExtensionService#_doActivateExtension vscode.debug-server-ready, startup: false, activationEvent: 'onDebugResolve'
+2026-04-04 19:15:19.645 [info] ExtensionService#_doActivateExtension ms-vscode.js-debug, startup: false, activationEvent: 'onDebugResolve:extensionHost'
+2026-04-04 19:15:19.719 [warning] [ms-vscode.js-debug] Accessing a window scoped configuration for a resource is not expected. To associate 'debug.javascript.breakOnConditionalError' to a resource, define its scope to 'resource' in configuration contributions in 'package.json'.
+2026-04-04 19:15:19.720 [warning] [ms-vscode.js-debug] Accessing a window scoped configuration for a resource is not expected. To associate 'debug.javascript.breakOnConditionalError' to a resource, define its scope to 'resource' in configuration contributions in 'package.json'.
+2026-04-04 19:15:19.846 [info] ExtensionService#_doActivateExtension vscode.terminal-suggest, startup: false, activationEvent: 'onTerminalShellIntegration:*'
+2026-04-04 19:15:31.312 [info] Extension host terminating: received terminate message from renderer
+2026-04-04 19:15:31.325 [info] Extension host with pid 96255 exiting with code 0

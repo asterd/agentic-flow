@@ -1,0 +1,16 @@
+2026-04-04 19:11:55.273 [info] update#setState idle
+2026-04-04 19:12:25.280 [info] update#setState checking for updates
+2026-04-04 19:12:25.482 [info] update#setState idle
+2026-04-04 19:12:30.216 [info] Extension host with pid 89656 exited with code: 0, signal: unknown.
+2026-04-04 19:15:20.444 [warning] [perf] profiling STARTED 2e8d36f0-3002-49c2-9142-28a8148c318f
+2026-04-04 19:15:25.460 [warning] [perf] profiling DONE 2e8d36f0-3002-49c2-9142-28a8148c318f
+2026-04-04 19:15:25.592 [warning] [perf] profiling STARTED 2e8d36f0-3002-49c2-9142-28a8148c318f
+2026-04-04 19:15:30.604 [warning] [perf] profiling DONE 2e8d36f0-3002-49c2-9142-28a8148c318f
+2026-04-04 19:15:30.720 [warning] [perf] profiling STARTED 2e8d36f0-3002-49c2-9142-28a8148c318f
+2026-04-04 19:15:31.388 [info] Extension host with pid 98435 exited with code: 15, signal: unknown.
+2026-04-04 19:15:31.388 [error] [UtilityProcess id: 3, type: extensionHost, pid: 98435]: crashed with code 15 and reason 'killed'
+2026-04-04 19:15:31.389 [info] Extension host with pid 96255 exited with code: 0, signal: unknown.
+2026-04-04 19:15:57.213 [info] Extension host with pid 99776 exited with code: 0, signal: unknown.
+2026-04-04 19:16:07.602 [info] Extension host with pid 613 exited with code: 0, signal: unknown.
+2026-04-04 19:16:14.185 [info] Extension host with pid 99385 exited with code: 0, signal: unknown.
+2026-04-04 19:17:21.528 [info] Extension host with pid 4691 exited with code: 0, signal: unknown.

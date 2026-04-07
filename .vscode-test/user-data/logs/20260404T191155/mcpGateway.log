@@ -1,0 +1,10 @@
+2026-04-04 19:11:55.263 [info] [McpGatewayService] Initialized
+2026-04-04 19:12:30.237 [info] [McpGateway][Channel] Client disconnected: window:1, cleaning up gateways
+2026-04-04 19:15:31.273 [info] [McpGateway][Channel] Client disconnected: window:2, cleaning up gateways
+2026-04-04 19:15:31.530 [info] [McpGateway][Channel] Client disconnected: window:3, cleaning up gateways
+2026-04-04 19:15:57.239 [info] [McpGateway][Channel] Client disconnected: window:5, cleaning up gateways
+2026-04-04 19:15:57.328 [info] [McpGateway][Channel] Client disconnected: window:5, cleaning up gateways
+2026-04-04 19:16:07.623 [info] [McpGateway][Channel] Client disconnected: window:5, cleaning up gateways
+2026-04-04 19:16:07.623 [info] [McpGateway][Channel] Client disconnected: window:5, cleaning up gateways
+2026-04-04 19:16:14.203 [info] [McpGateway][Channel] Client disconnected: window:4, cleaning up gateways
+2026-04-04 19:17:21.537 [info] [McpGateway][Channel] Client disconnected: window:6, cleaning up gateways

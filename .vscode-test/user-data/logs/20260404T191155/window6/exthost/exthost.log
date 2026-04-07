@@ -1,0 +1,43 @@
+2026-04-04 19:17:20.193 [info] Extension host with pid 4691 started
+2026-04-04 19:17:20.225 [info] ExtensionService#_doActivateExtension vscode.github-authentication, startup: false, activationEvent: 'onAuthenticationRequest:github'
+2026-04-04 19:17:20.236 [info] ExtensionService#_doActivateExtension vscode.emmet, startup: false, activationEvent: 'onLanguage'
+2026-04-04 19:17:20.263 [info] ExtensionService#_doActivateExtension vscode.git-base, startup: true, activationEvent: '*', root cause: vscode.git
+2026-04-04 19:17:20.265 [info] ExtensionService#_doActivateExtension vscode.git, startup: true, activationEvent: '*'
+2026-04-04 19:17:20.292 [info] ExtensionService#_doActivateExtension vscode.github, startup: true, activationEvent: '*'
+2026-04-04 19:17:20.340 [warning] [vscode.git] Accessing a resource scoped configuration without providing a resource is not expected. To get the effective value for 'git.openRepositoryInParentFolders', provide the URI of a resource or 'null' for any resource.
+2026-04-04 19:17:20.340 [warning] [vscode.git] Accessing a resource scoped configuration without providing a resource is not expected. To get the effective value for 'git.showProgress', provide the URI of a resource or 'null' for any resource.
+2026-04-04 19:17:20.347 [info] Eager extensions activated
+2026-04-04 19:17:20.350 [info] ExtensionService#_doActivateExtension vscode.debug-auto-launch, startup: false, activationEvent: 'onStartupFinished'
+2026-04-04 19:17:20.357 [info] ExtensionService#_doActivateExtension vscode.merge-conflict, startup: false, activationEvent: 'onStartupFinished'
+2026-04-04 19:17:21.511 [info] Extension host terminating: received terminate message from renderer
+2026-04-04 19:17:21.527 [error] ProxyResolver#addCertificatesV1 Canceled: Canceled
+	at new zI (file:///Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/workbench/api/node/extensionHostProcess.js:407:148505)
+	at r._remoteCall (file:///Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/workbench/api/node/extensionHostProcess.js:407:154557)
+	at i.<computed>.s.charCodeAt.i.<computed> (file:///Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/workbench/api/node/extensionHostProcess.js:407:151352)
+	at ng.loadCertificates (file:///Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/workbench/api/node/extensionHostProcess.js:498:79801)
+	at Object.loadAdditionalCertificates (file:///Applications/Visual%20Studio%20Code.app/Contents/Resources/app/out/vs/workbench/api/node/extensionHostProcess.js:631:22218)
+	at /Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/index.js:1012:49
+	at Generator.next (<anonymous>)
+	at /Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/index.js:35:71
+	at new Promise (<anonymous>)
+	at __awaiter (/Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/index.js:31:12)
+	at /Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/index.js:1011:33
+	at /Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/index.js:1014:20
+	at Generator.next (<anonymous>)
+	at /Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/index.js:35:71
+	at new Promise (<anonymous>)
+	at __awaiter (/Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/index.js:31:12)
+	at getOrLoadAdditionalCertificates (/Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/index.js:1007:12)
+	at addCertificatesToOptionsV1 (/Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/index.js:987:9)
+	at resolveProxyWithRequest (/Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/index.js:140:9)
+	at /Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/index.js:372:77
+	at new Promise (<anonymous>)
+	at PacProxyAgent.resolveP [as resolver] (/Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/index.js:372:54)
+	at PacProxyAgent.<anonymous> (/Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/agent.js:74:37)
+	at Generator.next (<anonymous>)
+	at /Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/agent.js:8:71
+	at new Promise (<anonymous>)
+	at __awaiter (/Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/agent.js:4:12)
+	at PacProxyAgent.connect (/Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/@vscode/proxy-agent/out/agent.js:56:16)
+	at /Applications/Visual Studio Code.app/Contents/Resources/app/node_modules/agent-base/dist/index.js:130:30
+2026-04-04 19:17:21.528 [info] Extension host with pid 4691 exiting with code 0

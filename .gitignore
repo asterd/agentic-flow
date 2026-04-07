@@ -1,0 +1,6 @@
+node_modules/
+out/
+*.vsix
+*.js.map
+.env
+.env.local

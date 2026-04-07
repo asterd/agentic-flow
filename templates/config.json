@@ -1,0 +1,117 @@
+{
+  "version": "2.0",
+  "stateFile": ".agentic-flow/WORKFLOW_STATE.md",
+  "sessionFile": ".agentic-flow/session.json",
+  "summaryMaxTokens": 250,
+  "contextMaxTokens": 1400,
+  "defaultModel": "claude-sonnet-4-6",
+  "runtime": {
+    "envFiles": [
+      ".agentic-flow/runtime.env"
+    ],
+    "env": {},
+    "customClis": [],
+    "customModels": []
+  },
+  "steps": [
+    {
+      "id": "spec",
+      "name": "📋 Refine Specification",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "skill": ".agentic-flow/skills/spec.md",
+      "contextMode": "none",
+      "goal": "Transform the requirement into a precise specification."
+    },
+    {
+      "id": "architecture",
+      "name": "🏛 Architecture Breakdown",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "skill": ".agentic-flow/skills/architecture.md",
+      "contextMode": "summary",
+      "contextStepIds": ["spec"],
+      "goal": "Turn the specification into architectural building blocks and delivery slices."
+    },
+    {
+      "id": "implementation-plan",
+      "name": "🗺 Development Plan",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "skill": ".agentic-flow/skills/implementation-plan.md",
+      "contextMode": "summary",
+      "contextStepIds": ["spec", "architecture"],
+      "goal": "Create an execution-ready implementation plan with file-level steps."
+    },
+    {
+      "id": "implement",
+      "name": "🛠 Implement",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "skill": ".agentic-flow/skills/implement.md",
+      "contextMode": "summary",
+      "contextStepIds": ["spec", "architecture", "implementation-plan"],
+      "goal": "Implement the planned changes in the workspace."
+    },
+    {
+      "id": "review",
+      "name": "🔍 Technical Review",
+      "enabled": true,
+      "model": "gpt-5.4",
+      "skill": ".agentic-flow/skills/arch-review.md",
+      "contextMode": "summary",
+      "contextStepIds": ["spec", "implementation-plan", "implement"],
+      "goal": "Review the implementation for correctness, architecture and regressions."
+    },
+    {
+      "id": "fix",
+      "name": "🧯 Fix Findings",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "skill": ".agentic-flow/skills/fix.md",
+      "contextMode": "summary",
+      "contextStepIds": ["review", "test", "security"],
+      "runCondition": "ifIssues",
+      "goal": "Address review, test and security findings before closing the run."
+    },
+    {
+      "id": "test",
+      "name": "🧪 Tests & Verification",
+      "enabled": true,
+      "model": "claude-sonnet-4-6",
+      "skill": ".agentic-flow/skills/testing.md",
+      "contextMode": "summary",
+      "contextStepIds": ["spec", "implementation-plan", "implement", "fix"],
+      "goal": "Add or update tests and summarize verification results."
+    },
+    {
+      "id": "security",
+      "name": "🔒 Security Review",
+      "enabled": true,
+      "model": "gpt-5.4",
+      "skill": ".agentic-flow/skills/security.md",
+      "contextMode": "summary",
+      "contextStepIds": ["spec", "architecture", "implement", "fix"],
+      "goal": "Review security impact, unsafe flows and hardening gaps."
+    },
+    {
+      "id": "docs",
+      "name": "📚 Documentation",
+      "enabled": true,
+      "model": "gpt-5.4-mini",
+      "skill": ".agentic-flow/skills/docs.md",
+      "contextMode": "summary",
+      "contextStepIds": ["spec", "implementation-plan", "implement", "review", "fix", "test", "security"],
+      "goal": "Update the documentation and operational notes required by the change."
+    },
+    {
+      "id": "final-report",
+      "name": "✅ Final Report",
+      "enabled": true,
+      "model": "gpt-5.4-mini",
+      "skill": ".agentic-flow/skills/done.md",
+      "contextMode": "summary",
+      "goal": "Summarize the session outcome, open risks and next actions."
+    }
+  ]
+}

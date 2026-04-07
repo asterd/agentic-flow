@@ -1,0 +1,23 @@
+2026-04-04 19:01:17.798 [info] [main] Log level: Info
+2026-04-04 19:01:17.822 [info] [main] Validating found git in: "/usr/bin/git"
+2026-04-04 19:01:17.847 [info] [main] Using git "2.50.1 (Apple Git-155)" from "/usr/bin/git"
+2026-04-04 19:01:17.847 [info] [Model][doInitialScan] Initial repository scan started
+2026-04-04 19:01:17.860 [info] > git rev-parse --show-toplevel [11ms]
+2026-04-04 19:01:17.860 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-04-04 19:01:17.870 [info] > git rev-parse --show-toplevel [9ms]
+2026-04-04 19:01:17.870 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-04-04 19:01:17.879 [info] > git rev-parse --show-toplevel [8ms]
+2026-04-04 19:01:17.879 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-04-04 19:01:17.890 [info] > git rev-parse --show-toplevel [10ms]
+2026-04-04 19:01:17.890 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-04-04 19:01:17.901 [info] > git rev-parse --show-toplevel [10ms]
+2026-04-04 19:01:17.901 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-04-04 19:01:17.911 [info] > git rev-parse --show-toplevel [9ms]
+2026-04-04 19:01:17.911 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-04-04 19:01:17.921 [info] > git rev-parse --show-toplevel [9ms]
+2026-04-04 19:01:17.921 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-04-04 19:01:17.930 [info] > git rev-parse --show-toplevel [9ms]
+2026-04-04 19:01:17.930 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-04-04 19:01:17.931 [info] [Model][doInitialScan] Initial repository scan completed - repositories (0), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-04-04 19:01:18.259 [info] > git rev-parse --show-toplevel [10ms]
+2026-04-04 19:01:18.259 [info] fatal: not a git repository (or any of the parent directories): .git

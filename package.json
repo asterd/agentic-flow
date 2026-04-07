@@ -1,0 +1,211 @@
+{
+  "name": "agentic-flow",
+  "displayName": "Agentic Flow",
+  "description": "Multi-model AI development pipeline orchestrator. Spec → Plan → Build → Review → Test → Security → Done.",
+  "version": "1.0.0",
+  "publisher": "agentic-flow",
+  "engines": { "vscode": "^1.95.0" },
+  "categories": ["AI", "Other"],
+  "icon": "media/icon.png",
+  "keywords": ["ai", "agent", "claude", "openai", "codex", "pipeline", "workflow"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agenticFlow",
+          "title": "Agentic Flow",
+          "icon": "media/icon-activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "agenticFlow": [
+        {
+          "type": "webview",
+          "id": "agenticFlow.panel",
+          "name": "Agentic Flow"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "agenticFlow.open",
+        "title": "Agentic Flow: Open Pipeline",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "agenticFlow.refreshModels",
+        "title": "Agentic Flow: Refresh Models & CLIs"
+      },
+      {
+        "command": "agenticFlow.initWorkspace",
+        "title": "Agentic Flow: Init Workspace"
+      },
+      {
+        "command": "agenticFlow.openSettings",
+        "title": "Agentic Flow: Open VS Code Settings"
+      },
+      {
+        "command": "agenticFlow.openWorkspaceConfig",
+        "title": "Agentic Flow: Open Workspace Config"
+      },
+      {
+        "command": "agenticFlow.openRuntimeEnv",
+        "title": "Agentic Flow: Open Runtime Env"
+      },
+      {
+        "command": "agenticFlow.revealSkillsFolder",
+        "title": "Agentic Flow: Reveal Skills Folder"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        { "command": "agenticFlow.open" },
+        { "command": "agenticFlow.refreshModels" },
+        { "command": "agenticFlow.initWorkspace" },
+        { "command": "agenticFlow.openSettings" },
+        { "command": "agenticFlow.openWorkspaceConfig" },
+        { "command": "agenticFlow.openRuntimeEnv" },
+        { "command": "agenticFlow.revealSkillsFolder" }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "agenticFlow.open",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a"
+      }
+    ],
+    "configuration": {
+      "title": "Agentic Flow",
+      "properties": {
+        "agenticFlow.autoDetectClis": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically detect installed AI CLIs on startup"
+        },
+        "agenticFlow.extraCliPaths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Additional directories to search for CLI binaries"
+        },
+        "agenticFlow.workspaceStorageDir": {
+          "type": "string",
+          "default": ".agentic-flow",
+          "markdownDescription": "Workspace-local storage directory used for `config.json`, `runtime.env`, session files and skills. Use [Open config.json](command:agenticFlow.openWorkspaceConfig), [Open runtime.env](command:agenticFlow.openRuntimeEnv), [Reveal skills folder](command:agenticFlow.revealSkillsFolder), or [open all Agentic Flow settings](command:agenticFlow.openSettings)."
+        },
+        "agenticFlow.apiProviders": {
+          "type": "object",
+          "default": {
+            "openai": {
+              "enabled": false,
+              "baseUrl": "https://api.openai.com/v1",
+              "apiKey": "",
+              "modelAllowList": []
+            },
+            "anthropic": {
+              "enabled": false,
+              "baseUrl": "https://api.anthropic.com/v1",
+              "apiKey": "",
+              "modelAllowList": []
+            },
+            "xai": {
+              "enabled": false,
+              "baseUrl": "https://api.x.ai/v1",
+              "apiKey": "",
+              "modelAllowList": []
+            },
+            "openrouter": {
+              "enabled": false,
+              "baseUrl": "https://openrouter.ai/api/v1",
+              "apiKey": "",
+              "modelAllowList": []
+            },
+            "ollama": {
+              "enabled": false,
+              "baseUrl": "http://localhost:11434/v1",
+              "apiKey": "",
+              "modelAllowList": []
+            }
+          },
+          "markdownDescription": "API providers exposed alongside local CLIs. Keep local CLIs as the default path, then add providers here when you want API-backed models to appear in selectors too. Keys can also come from `.agentic-flow/runtime.env` (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`). For stable behavior, prefer also setting `modelAllowList` when you want to limit discovery.",
+          "additionalProperties": false,
+          "properties": {
+            "openai": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "baseUrl": { "type": "string", "default": "https://api.openai.com/v1" },
+                "apiKey": { "type": "string", "default": "", "format": "password" },
+                "modelAllowList": { "type": "array", "items": { "type": "string" }, "default": [] }
+              }
+            },
+            "anthropic": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "baseUrl": { "type": "string", "default": "https://api.anthropic.com/v1" },
+                "apiKey": { "type": "string", "default": "", "format": "password" },
+                "modelAllowList": { "type": "array", "items": { "type": "string" }, "default": [] }
+              }
+            },
+            "xai": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "baseUrl": { "type": "string", "default": "https://api.x.ai/v1" },
+                "apiKey": { "type": "string", "default": "", "format": "password" },
+                "modelAllowList": { "type": "array", "items": { "type": "string" }, "default": [] }
+              }
+            },
+            "openrouter": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "baseUrl": { "type": "string", "default": "https://openrouter.ai/api/v1" },
+                "apiKey": { "type": "string", "default": "", "format": "password" },
+                "modelAllowList": { "type": "array", "items": { "type": "string" }, "default": [] }
+              }
+            },
+            "ollama": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "baseUrl": { "type": "string", "default": "http://localhost:11434/v1" },
+                "apiKey": { "type": "string", "default": "", "format": "password" },
+                "modelAllowList": { "type": "array", "items": { "type": "string" }, "default": [] }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "dev:host": "code . --new-window --extensionDevelopmentPath=. --user-data-dir ./.vscode-test/user-data --extensions-dir ./.vscode-test/extensions",
+    "dev:host:insiders": "code-insiders . --new-window --extensionDevelopmentPath=. --user-data-dir ./.vscode-test/user-data --extensions-dir ./.vscode-test/extensions",
+    "dev:host:workspace": "mkdir -p ./.vscode-test/workspace && code ./.vscode-test/workspace --new-window --extensionDevelopmentPath=. --user-data-dir ./.vscode-test/user-data --extensions-dir ./.vscode-test/extensions"
+  },
+  "dependencies": {
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^9.0.0",
+    "@types/vscode": "^1.95.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.24.0"
+  }
+}

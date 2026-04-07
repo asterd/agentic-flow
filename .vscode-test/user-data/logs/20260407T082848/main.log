@@ -1,0 +1,11 @@
+2026-04-07 08:28:48.603 [info] update#setState idle
+2026-04-07 08:28:59.451 [info] Extension host with pid 9059 exited with code: 0, signal: unknown.
+2026-04-07 08:29:18.605 [info] update#setState checking for updates
+2026-04-07 08:29:18.810 [info] update#setState idle
+2026-04-07 09:29:18.707 [info] update#setState checking for updates
+2026-04-07 09:29:18.847 [info] update#setState idle
+2026-04-07 10:18:33.484 [warning] [perf] profiling STARTED aee1f81c-bfb4-483c-8cfe-a5d911e744fb
+2026-04-07 10:18:38.508 [warning] [perf] profiling DONE aee1f81c-bfb4-483c-8cfe-a5d911e744fb
+2026-04-07 10:18:38.637 [warning] [perf] profiling STARTED aee1f81c-bfb4-483c-8cfe-a5d911e744fb
+2026-04-07 10:18:40.262 [info] Extension host with pid 33509 exited with code: 0, signal: unknown.
+2026-04-07 10:20:00.752 [info] Extension host with pid 55915 exited with code: 0, signal: unknown.

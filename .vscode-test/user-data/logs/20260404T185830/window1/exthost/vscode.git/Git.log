@@ -1,0 +1,18 @@
+2026-04-04 18:58:32.040 [info] [main] Log level: Info
+2026-04-04 18:58:32.067 [info] [main] Validating found git in: "/usr/bin/git"
+2026-04-04 18:58:32.102 [info] [main] Using git "2.50.1 (Apple Git-155)" from "/usr/bin/git"
+2026-04-04 18:58:32.102 [info] [Model][doInitialScan] Initial repository scan started
+2026-04-04 18:58:32.103 [info] [Model][doInitialScan] Initial repository scan completed - repositories (0), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-04-04 18:58:57.551 [info] [main] Log level: Info
+2026-04-04 18:58:57.568 [info] [main] Validating found git in: "/usr/bin/git"
+2026-04-04 18:58:57.589 [info] [main] Using git "2.50.1 (Apple Git-155)" from "/usr/bin/git"
+2026-04-04 18:58:57.589 [info] [Model][doInitialScan] Initial repository scan started
+2026-04-04 18:58:57.602 [info] > git rev-parse --show-toplevel [10ms]
+2026-04-04 18:58:57.602 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-04-04 18:58:57.611 [info] > git rev-parse --show-toplevel [9ms]
+2026-04-04 18:58:57.611 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-04-04 18:58:57.612 [info] [Model][doInitialScan] Initial repository scan completed - repositories (0), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-04-04 18:58:57.638 [info] > git rev-parse --show-toplevel [8ms]
+2026-04-04 18:58:57.638 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-04-04 18:58:58.102 [info] > git rev-parse --show-toplevel [18ms]
+2026-04-04 18:58:58.102 [info] fatal: not a git repository (or any of the parent directories): .git

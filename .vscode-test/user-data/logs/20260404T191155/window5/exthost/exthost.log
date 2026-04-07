@@ -1,0 +1,29 @@
+2026-04-04 19:15:46.361 [info] Extension host with pid 99776 started
+2026-04-04 19:15:46.367 [info] ExtensionService#_doActivateExtension vscode.github-authentication, startup: false, activationEvent: 'onAuthenticationRequest:github'
+2026-04-04 19:15:46.378 [info] ExtensionService#_doActivateExtension agentic-flow.agentic-flow, startup: false, activationEvent: 'onView:agenticFlow.panel'
+2026-04-04 19:15:46.387 [info] ExtensionService#_doActivateExtension vscode.emmet, startup: false, activationEvent: 'onLanguage'
+2026-04-04 19:15:47.191 [info] ExtensionService#_doActivateExtension vscode.git-base, startup: true, activationEvent: '*', root cause: vscode.git
+2026-04-04 19:15:47.193 [warning] agentic-flow.agentic-flow created a webview without a content security policy: https://aka.ms/vscode-webview-missing-csp
+2026-04-04 19:15:47.193 [info] ExtensionService#_doActivateExtension vscode.git, startup: true, activationEvent: '*'
+2026-04-04 19:15:47.218 [info] ExtensionService#_doActivateExtension vscode.github, startup: true, activationEvent: '*'
+2026-04-04 19:15:47.268 [warning] [vscode.git] Accessing a resource scoped configuration without providing a resource is not expected. To get the effective value for 'git.openRepositoryInParentFolders', provide the URI of a resource or 'null' for any resource.
+2026-04-04 19:15:47.268 [warning] [vscode.git] Accessing a resource scoped configuration without providing a resource is not expected. To get the effective value for 'git.showProgress', provide the URI of a resource or 'null' for any resource.
+2026-04-04 19:15:47.287 [info] Eager extensions activated
+2026-04-04 19:15:47.287 [info] ExtensionService#_doActivateExtension vscode.debug-auto-launch, startup: false, activationEvent: 'onStartupFinished'
+2026-04-04 19:15:47.289 [info] ExtensionService#_doActivateExtension vscode.merge-conflict, startup: false, activationEvent: 'onStartupFinished'
+2026-04-04 19:15:57.191 [info] Extension host terminating: received terminate message from renderer
+2026-04-04 19:15:57.203 [info] Extension host with pid 99776 exiting with code 0
+2026-04-04 19:15:57.775 [info] Extension host with pid 613 started
+2026-04-04 19:15:57.775 [info] Skipping acquiring lock for /Users/ddurzo/Development/misc/agentic-flow/.vscode-test/user-data/User/workspaceStorage/752c664dcf2b5c05e377d11fb690e53c.
+2026-04-04 19:15:57.791 [info] ExtensionService#_doActivateExtension vscode.github-authentication, startup: false, activationEvent: 'onAuthenticationRequest:github'
+2026-04-04 19:15:57.804 [info] ExtensionService#_doActivateExtension vscode.emmet, startup: false, activationEvent: 'onLanguage'
+2026-04-04 19:15:57.823 [info] ExtensionService#_doActivateExtension vscode.git-base, startup: true, activationEvent: '*', root cause: vscode.git
+2026-04-04 19:15:57.827 [info] ExtensionService#_doActivateExtension vscode.git, startup: true, activationEvent: '*'
+2026-04-04 19:15:57.848 [info] ExtensionService#_doActivateExtension vscode.github, startup: true, activationEvent: '*'
+2026-04-04 19:15:57.895 [warning] [vscode.git] Accessing a resource scoped configuration without providing a resource is not expected. To get the effective value for 'git.openRepositoryInParentFolders', provide the URI of a resource or 'null' for any resource.
+2026-04-04 19:15:57.895 [warning] [vscode.git] Accessing a resource scoped configuration without providing a resource is not expected. To get the effective value for 'git.showProgress', provide the URI of a resource or 'null' for any resource.
+2026-04-04 19:15:57.901 [info] Eager extensions activated
+2026-04-04 19:15:57.904 [info] ExtensionService#_doActivateExtension vscode.debug-auto-launch, startup: false, activationEvent: 'onStartupFinished'
+2026-04-04 19:15:57.905 [info] ExtensionService#_doActivateExtension vscode.merge-conflict, startup: false, activationEvent: 'onStartupFinished'
+2026-04-04 19:16:07.596 [info] Extension host terminating: received terminate message from renderer
+2026-04-04 19:16:07.601 [info] Extension host with pid 613 exiting with code 0

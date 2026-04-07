@@ -1,0 +1,205 @@
+# Agentic Flow
+
+> VS Code extension that orchestrates AI CLI agents through a configurable, session-based development pipeline.
+
+## What it does
+
+Agentic Flow is a pipeline orchestrator for capable local AI clients — Claude Code, Codex, Continue, Copilot, or VS Code LM providers. You write a requirement, assign different models to different steps, and the extension runs them in sequence.
+
+Each step:
+- receives compact structured context from prior steps (not raw chat history)
+- writes its output as structured JSON + markdown summary
+- tracks which files changed
+- records model used, source used (CLI/API/VS Code LM), duration, token usage, and findings
+
+Sessions are persistent. You can continue the same session with an additional requirement and the pipeline carries forward what it already knows.
+
+## Pipeline
+
+Default 10-step flow — each step can be toggled, reassigned to a different model, or given a custom skill file:
+
+| # | Step | Default model |
+|---|---|---|
+| 1 | 📋 Refine Specification | claude-sonnet-4-6 |
+| 2 | 🏛 Architecture Breakdown | claude-sonnet-4-6 |
+| 3 | 🗺 Development Plan | claude-sonnet-4-6 |
+| 4 | 🛠 Implement | claude-sonnet-4-6 |
+| 5 | 🔍 Technical Review | gpt-5.4 |
+| 6 | 🧯 Fix Findings _(runs only if issues found)_ | claude-sonnet-4-6 |
+| 7 | 🧪 Tests & Verification | claude-sonnet-4-6 |
+| 8 | 🔒 Security Review | gpt-5.4 |
+| 9 | 📚 Documentation | gpt-5.4-mini |
+| 10 | ✅ Final Report | gpt-5.4-mini |
+
+## Token strategy
+
+- Step outputs are structured JSON — compact and machine-parseable
+- Downstream steps receive `summary` mode by default: one dense block per prior step, token-budgeted
+- Open findings are de-duplicated and sorted by severity before injection
+- Context handoff can be limited per step via `contextStepIds`, so late-stage steps do not inherit irrelevant summaries
+- Per-step context mode is configurable: `summary` / `full` / `none`
+
+## UX notes
+
+- Persistent configuration is anchored in the standard VS Code Settings UI
+- The settings page links directly to the real workspace files under `.agentic-flow/`
+- The sidebar focuses on runs and per-session overrides; model selectors are grouped by source
+- API-backed runs report precise token usage when the provider exposes it
+- Skill files can be opened directly from per-run overrides
+- `Reset local settings` rebuilds `.agentic-flow/` from defaults for the current workspace
+
+## Workspace state
+
+Everything lives under `.agentic-flow/` in your workspace:
+
+```
+.agentic-flow/
+├── config.json          # pipeline definition and per-step settings
+├── session.json         # session state, requirement history, run history
+├── WORKFLOW_STATE.md    # human-readable summary of latest step outputs
+├── runtime.env          # API keys and env vars (gitignored)
+└── skills/              # editable skill prompts, one per step
+```
+
+## Supported runtimes
+
+Auto-detected from `PATH`:
+
+| CLI | Models |
+|---|---|
+| `claude` | Claude Opus/Sonnet/Haiku + custom via env |
+| `codex` | GPT-5.x series (reads `~/.codex/models_cache.json`) |
+| `cn` / `continue` | Any configured Continue model |
+| `gh copilot` | Copilot GPT-4o, Copilot Claude Sonnet |
+| VS Code LM API | Any extension-provided model (GitHub Copilot, etc.) |
+
+Optional API providers from VS Code settings:
+
+| Provider | Discovery | Auth |
+|---|---|---|
+| OpenAI | `/v1/models` | API key |
+| Anthropic | curated Claude catalog | API key |
+| xAI | `/v1/models` | API key |
+| OpenRouter | `/v1/models` | API key |
+| Ollama | `/api/tags` | local / no key by default |
+
+Custom CLIs and local OpenAI-compatible servers can still be added in `config.json` under `runtime.customModels`.
+
+## Runtime configuration
+
+Global provider settings live in VS Code settings under `agenticFlow.apiProviders`.
+
+```json
+{
+  "agenticFlow.apiProviders": {
+    "openai": {
+      "enabled": true,
+      "apiKey": "sk-...",
+      "baseUrl": "https://api.openai.com/v1",
+      "modelAllowList": ["gpt-5.4", "gpt-5.4-mini"]
+    },
+    "openrouter": {
+      "enabled": true,
+      "apiKey": "sk-or-...",
+      "baseUrl": "https://openrouter.ai/api/v1"
+    },
+    "ollama": {
+      "enabled": true,
+      "baseUrl": "http://localhost:11434/v1"
+    }
+  }
+}
+```
+
+Workspace runtime config remains available in `.agentic-flow/config.json`:
+
+```json
+{
+  "runtime": {
+    "envFiles": [".agentic-flow/runtime.env"],
+    "env": {},
+    "customModels": [
+      {
+        "id": "qwen2.5-coder-local",
+        "modelName": "qwen2.5-coder:latest",
+        "label": "Qwen 2.5 Coder (custom CLI route)",
+        "cliId": "codex",
+        "launchArgs": ["--oss", "--local-provider", "ollama"]
+      }
+    ]
+  }
+}
+```
+
+Common setups:
+- **Local CLI auth only** — no extra config needed, extension detects installed CLIs
+- **API key in VS Code settings** — set `agenticFlow.apiProviders`
+- **API key per workspace** — put keys in `.agentic-flow/runtime.env`
+- **Local OpenAI-compatible server** — set `OPENAI_BASE_URL` and add a custom model
+- **Binary outside PATH** — set `agenticFlow.extraCliPaths` in VS Code settings
+
+## Architecture
+
+```
+extension.ts
+  ├── cliDetector.ts       detect installed CLIs and available models
+  ├── configManager.ts     load/save config, session state, skill files
+  ├── workflowEngine.ts    session lifecycle, step orchestration, file tracking
+  │     ├── contextManager.ts   prompt assembly, structured output parsing
+  │     └── stepRunner.ts       CLI subprocess or VS Code LM execution
+  └── webviewProvider.ts   chat-style panel UI (sidebar)
+```
+
+---
+
+## Commands
+
+### Install dependencies
+
+```bash
+npm install
+```
+
+### Compile TypeScript
+
+```bash
+npm run compile
+```
+
+### Watch mode (recompile on save)
+
+```bash
+npm run watch
+```
+
+### Run the extension (isolated dev host)
+
+Compila e apre una nuova finestra VS Code con l'estensione caricata, isolata dalle tue estensioni globali:
+
+```bash
+npm run compile && npm run dev:host
+```
+
+Una volta aperta la finestra, il plugin è visibile nella **Activity Bar a sinistra** — cerca l'icona ⚡ (fulmine). Cliccaci sopra per aprire il pannello Agentic Flow.
+
+In alternativa: `Cmd+Shift+P` → `Agentic Flow: Open Pipeline`, oppure `Cmd+Shift+A`.
+
+### Run with a clean empty workspace
+
+Useful for testing the UI from scratch without an existing project:
+
+```bash
+npm run dev:host:workspace
+```
+
+### Package as `.vsix`
+
+```bash
+npm run package
+```
+
+---
+
+## License
+
+MIT
