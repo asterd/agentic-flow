@@ -48,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          npx @vscode/vsce package --out "dist/${VSIX_NAME}"
+          npx @vscode/vsce package --allow-missing-repository --out "dist/${VSIX_NAME}"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4

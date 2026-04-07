@@ -193,8 +193,8 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package",
-    "package:ci": "vsce package --out dist/agentic-flow.vsix",
+    "package": "vsce package --allow-missing-repository",
+    "package:ci": "vsce package --allow-missing-repository --out dist/agentic-flow.vsix",
     "dev:host": "code . --new-window --extensionDevelopmentPath=. --user-data-dir ./.vscode-test/user-data --extensions-dir ./.vscode-test/extensions",
     "dev:host:insiders": "code-insiders . --new-window --extensionDevelopmentPath=. --user-data-dir ./.vscode-test/user-data --extensions-dir ./.vscode-test/extensions",
     "dev:host:workspace": "mkdir -p ./.vscode-test/workspace && code ./.vscode-test/workspace --new-window --extensionDevelopmentPath=. --user-data-dir ./.vscode-test/user-data --extensions-dir ./.vscode-test/extensions"
