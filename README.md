@@ -2,6 +2,8 @@
 
 > VS Code extension that orchestrates AI CLI agents through a configurable, session-based development pipeline.
 
+The extension can run against local CLIs by default, and can optionally expose API-backed models from multiple providers in the same selectors.
+
 ## What it does
 
 Agentic Flow is a pipeline orchestrator for capable local AI clients — Claude Code, Codex, Continue, Copilot, or VS Code LM providers. You write a requirement, assign different models to different steps, and the extension runs them in sequence.
@@ -89,6 +91,12 @@ Custom CLIs and local OpenAI-compatible servers can still be added in `config.js
 
 Global provider settings live in VS Code settings under `agenticFlow.apiProviders`.
 
+Useful settings:
+
+- `agenticFlow.apiProviders` configures OpenAI, Anthropic, xAI, OpenRouter, and Ollama API access
+- `agenticFlow.workspaceStorageDir` changes where workspace-local files such as `config.json`, `runtime.env`, `session.json`, and `skills/` are stored
+- `agenticFlow.extraCliPaths` adds extra directories for local CLI autodetection
+
 ```json
 {
   "agenticFlow.apiProviders": {
@@ -137,6 +145,12 @@ Common setups:
 - **API key per workspace** — put keys in `.agentic-flow/runtime.env`
 - **Local OpenAI-compatible server** — set `OPENAI_BASE_URL` and add a custom model
 - **Binary outside PATH** — set `agenticFlow.extraCliPaths` in VS Code settings
+
+Model selection behavior:
+
+- If the same family is available from multiple sources, the selector shows separate grouped entries such as `Local CLI · Anthropic` and `API · Anthropic`
+- Existing configs that still reference plain model names continue to work; the extension resolves them to the best available source, preferring local CLI first
+- API-backed runs store precise token usage when the provider returns it, while CLI-backed runs keep the existing estimated accounting
 
 ## Architecture
 
@@ -198,11 +212,23 @@ npm run dev:host:workspace
 npm run package
 ```
 
+This packages the extension with `vsce` and already includes the `--allow-missing-repository` safeguard used by CI.
+
+### CI package output
+
+```bash
+npm run package:ci
+```
+
+This writes the packaged extension to `dist/` and is the same path used by GitHub Actions.
+
 ## CI / Releases
 
 - Every push builds and packages a `.vsix` in GitHub Actions as a downloadable workflow artifact
 - Pushes to `main` also refresh the GitHub prerelease `latest-build` with the newest `.vsix`
 - CI rewrites the extension version only inside the runner to a unique prerelease form like `1.0.0-ci.42`, so each generated build is installable as a distinct package
+- The workflow forces GitHub JavaScript actions to run on Node 24 to avoid the Node 20 deprecation warning from GitHub-hosted runners
+- Packaging includes a real extension icon and bundled MIT license, so `vsce package` succeeds cleanly in CI as well as locally
 
 ---
 
