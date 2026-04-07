@@ -198,6 +198,12 @@ npm run dev:host:workspace
 npm run package
 ```
 
+## CI / Releases
+
+- Every push builds and packages a `.vsix` in GitHub Actions as a downloadable workflow artifact
+- Pushes to `main` also refresh the GitHub prerelease `latest-build` with the newest `.vsix`
+- CI rewrites the extension version only inside the runner to a unique prerelease form like `1.0.0-ci.42`, so each generated build is installable as a distinct package
+
 ---
 
 ## License

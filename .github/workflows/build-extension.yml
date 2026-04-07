@@ -1,0 +1,75 @@
+name: Build Extension
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: extension-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compute CI version
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_VERSION="$(node -p "require('./package.json').version.split('-')[0]")"
+          CI_VERSION="${BASE_VERSION}-ci.${GITHUB_RUN_NUMBER}"
+          node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); pkg.version='${CI_VERSION}'; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
+          echo "CI_VERSION=${CI_VERSION}" >> "$GITHUB_ENV"
+          echo "VSIX_NAME=agentic-flow-${CI_VERSION}.vsix" >> "$GITHUB_ENV"
+
+      - name: Build extension
+        run: npm run compile
+
+      - name: Package VSIX
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          npx @vscode/vsce package --out "dist/${VSIX_NAME}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.VSIX_NAME }}
+          path: dist/${{ env.VSIX_NAME }}
+          if-no-files-found: error
+
+      - name: Publish prerelease on main
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-build
+          name: Latest Build
+          prerelease: true
+          make_latest: false
+          target_commitish: ${{ github.sha }}
+          files: dist/${{ env.VSIX_NAME }}
+          body: |
+            Automated extension build from `${{ github.sha }}`.
+
+            Version: `${{ env.CI_VERSION }}`
+            Branch: `${{ github.ref_name }}`
+            Commit: `${{ github.event.head_commit.message }}`
