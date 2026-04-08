@@ -18,7 +18,7 @@ Sessions are persistent. You can continue the same session with an additional re
 
 ## Pipeline
 
-Default 10-step flow — each step can be toggled, reassigned to a different model, or given a custom skill file:
+Default 11-step flow — each step can be toggled, reassigned to a different model, or given a custom skill file:
 
 | # | Step | Default model |
 |---|---|---|
@@ -31,7 +31,8 @@ Default 10-step flow — each step can be toggled, reassigned to a different mod
 | 7 | 🧪 Tests & Verification | claude-sonnet-4-6 |
 | 8 | 🔒 Security Review | gpt-5.4 |
 | 9 | 📚 Documentation | gpt-5.4-mini |
-| 10 | ✅ Final Report | gpt-5.4-mini |
+| 10 | 💥 Runtime Hard Check _(optional, disabled by default)_ | claude-sonnet-4-6 |
+| 11 | ✅ Final Report | gpt-5.4-mini |
 
 ## Token strategy
 
@@ -50,6 +51,7 @@ Default 10-step flow — each step can be toggled, reassigned to a different mod
 - API discovery now happens after activation, so a slow provider should no longer block the extension from loading
 - Skill files can be opened directly from per-run overrides
 - `Reset local settings` rebuilds `.agentic-flow/` from defaults for the current workspace
+- The optional hard-check step can try to boot the generated app for real, collect logs under `.agentic-flow/logs/`, and retry with fixes when a CLI-backed model is used
 
 ## Workspace state
 
@@ -87,6 +89,46 @@ Optional API providers from VS Code settings:
 | Ollama | `/api/tags` | local / no key by default |
 
 Custom CLIs and local OpenAI-compatible servers can still be added in `config.json` under `runtime.customModels`.
+
+## Runtime Hard Check
+
+The optional `💥 Runtime Hard Check` step is a separate executor, not just another prompt. It tries to determine how the generated project should boot, runs it for real, captures logs, and if startup fails it can ask the selected model to fix the workspace and retry a bounded number of times.
+
+Current auto-detection order:
+
+- existing `docker-compose.yml` / `compose.yaml`
+- Node projects with `package.json` startup scripts such as `start`, `dev`, `serve`, `preview`
+- Laravel projects with `artisan`
+
+By default it writes attempt logs under:
+
+```text
+.agentic-flow/logs/hard-check/<timestamp>/attempt-<n>/
+```
+
+Advanced behavior can be overridden in `.agentic-flow/config.json`:
+
+```json
+{
+  "id": "hard-check",
+  "enabled": true,
+  "model": "claude-sonnet-4-6",
+  "executor": "hard-check",
+  "hardCheck": {
+    "strategy": "auto",
+    "maxAttempts": 3,
+    "startupTimeoutMs": 120000,
+    "stableWindowMs": 12000,
+    "healthUrl": "http://127.0.0.1:3000"
+  }
+}
+```
+
+Notes:
+
+- `strategy: "auto"` prefers existing Docker/compose setups when present, otherwise falls back to local startup heuristics
+- if the selected model is API-backed or VS Code LM-backed, the hard-check still verifies runtime, but self-healing retries are limited because those sources do not directly edit the workspace the way local CLI agents do
+- you can force explicit commands with `installCommand`, `buildCommand`, `startCommand`, `healthCommand`, `logCommand`, and `teardownCommand` when auto-detection is not enough
 
 ## Runtime configuration
 

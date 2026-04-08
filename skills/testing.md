@@ -18,6 +18,13 @@ Write tests that give the team confidence to ship. Prioritise correctness over c
 - Mock at the system boundary only (external APIs, DB, time). Don't mock your own code.
 - Aim for >80% branch coverage on code in `artifacts` from the implement step.
 - Name tests as sentences: `should return 404 when user does not exist`.
+- If the change affects runtime boot or container orchestration, add at least one verification path for that shape:
+  - config parsing / env validation
+  - startup command assumptions
+  - health endpoint or readiness behavior
+  - service interaction contract
+- Prefer tests that catch config drift early, such as missing required env, bad default ports, invalid URLs, or incompatible startup parameters.
+- For multi-service/container changes, cover the seam where components meet before adding more internal mocks.
 
 ## Output
 Show the test code. Then summarise: what's covered, what's not, and why.

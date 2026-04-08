@@ -13,5 +13,14 @@ Apply the smallest effective fixes to the open findings from review, testing, an
 - Prefer the fix stated in the finding's `recommendation`; deviate only if the recommendation is wrong.
 - A fix that breaks something else is worse than leaving the original bug open.
 - If a finding turns out to be a false positive, mark it `info` and explain why.
+- When fixing runtime or container issues, check the whole path, not just the failing line:
+  - config source
+  - startup command
+  - referenced file/path
+  - port/network assumption
+  - dependent service availability
+- Do not patch logs or suppress errors just to make startup look green.
+- Prefer fixes that reduce configuration drift between local run, container run, and verification scripts.
+- If a fix changes an interaction contract, update both producer and consumer sides in the same pass or leave a clear blocker.
 
 Finish with the `agenticflow` JSON block. List only unresolved findings in the JSON; resolved ones belong in `decisions`.

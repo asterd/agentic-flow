@@ -105,6 +105,23 @@
       "goal": "Update the documentation and operational notes required by the change."
     },
     {
+      "id": "hard-check",
+      "name": "💥 Runtime Hard Check",
+      "enabled": false,
+      "model": "claude-sonnet-4-6",
+      "executor": "hard-check",
+      "skill": ".agentic-flow/skills/hard-check.md",
+      "contextMode": "summary",
+      "contextStepIds": ["spec", "implementation-plan", "implement", "fix", "test", "docs"],
+      "goal": "Try to boot the generated application for real, read runtime logs, fix startup issues and retry a bounded number of times.",
+      "hardCheck": {
+        "strategy": "auto",
+        "maxAttempts": 3,
+        "startupTimeoutMs": 120000,
+        "stableWindowMs": 12000
+      }
+    },
+    {
       "id": "final-report",
       "name": "✅ Final Report",
       "enabled": true,

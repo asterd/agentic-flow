@@ -7,9 +7,11 @@ export type ContextMode = 'summary' | 'full' | 'none';
 export type RunMode = 'new' | 'continue';
 export type StepRunCondition = 'always' | 'ifIssues';
 export type StepResultStatus = 'ok' | 'issues' | 'blocked';
+export type StepExecutor = 'model' | 'hard-check';
 export type ModelSource = 'cli' | 'api' | 'vscode';
 export type TokenAccounting = 'estimated' | 'reported';
 export type ApiProviderId = 'openai' | 'anthropic' | 'xai' | 'openrouter' | 'ollama';
+export type HardCheckStrategy = 'auto' | 'docker-compose' | 'local-node' | 'laravel';
 
 export interface CliInfo {
   id: string;
@@ -72,6 +74,7 @@ export interface StepConfig {
   name: string;
   enabled: boolean;
   model: string;
+  executor?: StepExecutor;
   cli?: string;
   skill?: string;
   contextMode?: ContextMode;
@@ -79,7 +82,23 @@ export interface StepConfig {
   contextFiles?: string[];
   runCondition?: StepRunCondition;
   goal?: string;
+  hardCheck?: HardCheckConfig;
   meta?: Record<string, unknown>;
+}
+
+export interface HardCheckConfig {
+  strategy?: HardCheckStrategy;
+  maxAttempts?: number;
+  startupTimeoutMs?: number;
+  stableWindowMs?: number;
+  healthUrl?: string;
+  installCommand?: string;
+  buildCommand?: string;
+  startCommand?: string;
+  healthCommand?: string;
+  logCommand?: string;
+  teardownCommand?: string;
+  env?: Record<string, string>;
 }
 
 export interface AgenticFlowConfig {
@@ -168,6 +187,8 @@ export interface StepState {
   sourceLabel?: string;
   skillPath?: string;
   filesChanged?: string[];
+  attempts?: number;
+  verificationStatus?: 'passed' | 'failed' | 'timeout' | 'blocked';
 }
 
 export interface WorkflowRunState {
@@ -214,6 +235,8 @@ export interface RunHistoryEntry {
     promptTokens?: number;
     outputTokens?: number;
     tokenUsage?: TokenUsage;
+    attempts?: number;
+    verificationStatus?: 'passed' | 'failed' | 'timeout' | 'blocked';
   }>;
 }
 

@@ -17,6 +17,7 @@ import type {
   WorkflowRunState,
 } from './types';
 import { buildStepPrompt, extractStructuredOutput, writeStepSummary } from './contextManager';
+import { runHardCheckStep } from './hardCheckRunner';
 import { runStep } from './stepRunner';
 import { resolveCliForModel, resolveModelSelection } from './cliDetector';
 import { getStateFilePath, loadSessionState, resolveRuntimeEnv, saveSessionState } from './configManager';
@@ -238,15 +239,26 @@ export class WorkflowEngine {
       workspaceRoot: this.workspaceRoot,
     });
 
-    const result = await runStep({
-      cli,
-      model,
-      prompt,
-      workspaceRoot: this.workspaceRoot,
-      onChunk: chunk => this.emit({ type: 'stepLog', stepId: step.id, chunk }),
-      cancellationToken: this._cancelSource?.token,
-      env: resolveRuntimeEnv(config),
-    });
+    const result = step.executor === 'hard-check'
+      ? await runHardCheckStep({
+        step,
+        cli,
+        model,
+        prompt,
+        workspaceRoot: this.workspaceRoot,
+        onChunk: chunk => this.emit({ type: 'stepLog', stepId: step.id, chunk }),
+        cancellationToken: this._cancelSource?.token,
+        env: resolveRuntimeEnv(config),
+      })
+      : await runStep({
+        cli,
+        model,
+        prompt,
+        workspaceRoot: this.workspaceRoot,
+        onChunk: chunk => this.emit({ type: 'stepLog', stepId: step.id, chunk }),
+        cancellationToken: this._cancelSource?.token,
+        env: resolveRuntimeEnv(config),
+      });
 
     if (result.exitCode !== 0) {
       const detail = result.stderr || result.output.slice(-300).trim() || `exit code ${result.exitCode}`;
@@ -265,6 +277,10 @@ export class WorkflowEngine {
     stepState.outputTokens = result.tokenUsage?.outputTokens ?? result.outputTokens;
     stepState.tokensUsed = result.tokenUsage?.totalTokens ?? (stepState.promptTokens + stepState.outputTokens);
     stepState.durationMs = result.durationMs;
+    if ('attempts' in result && typeof result.attempts === 'number') stepState.attempts = result.attempts;
+    if ('verificationStatus' in result && typeof result.verificationStatus === 'string') {
+      stepState.verificationStatus = result.verificationStatus as StepState['verificationStatus'];
+    }
 
     const stateFile = getStateFilePath();
     if (stateFile) {
@@ -303,6 +319,8 @@ export class WorkflowEngine {
         promptTokens: step.promptTokens,
         outputTokens: step.outputTokens,
         tokenUsage: step.tokenUsage,
+        attempts: step.attempts,
+        verificationStatus: step.verificationStatus,
       })),
     };
 
