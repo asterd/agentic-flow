@@ -45,13 +45,23 @@ const DEFAULT_STEPS: StepConfig[] = [
     goal: 'Create an execution-ready implementation plan with file-level steps.',
   },
   {
+    id: 'formal-precheck',
+    name: '🧭 Formal Pre-Check',
+    enabled: true,
+    model: 'gpt-5.4',
+    skill: '.agentic-flow/skills/formal-precheck.md',
+    contextMode: 'summary',
+    contextStepIds: ['spec', 'architecture', 'implementation-plan'],
+    goal: 'Validate contracts, structure, runtime assumptions and logical consistency before implementation starts.',
+  },
+  {
     id: 'implement',
     name: '🛠 Implement',
     enabled: true,
     model: 'claude-sonnet-4-6',
     skill: '.agentic-flow/skills/implement.md',
     contextMode: 'summary',
-    contextStepIds: ['spec', 'architecture', 'implementation-plan'],
+    contextStepIds: ['spec', 'architecture', 'implementation-plan', 'formal-precheck'],
     goal: 'Implement the planned changes in the workspace.',
   },
   {
@@ -61,7 +71,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     model: 'gpt-5.4',
     skill: '.agentic-flow/skills/arch-review.md',
     contextMode: 'summary',
-    contextStepIds: ['spec', 'implementation-plan', 'implement'],
+    contextStepIds: ['spec', 'implementation-plan', 'formal-precheck', 'implement'],
     goal: 'Review the implementation for correctness, architecture and regressions.',
   },
   {
@@ -82,7 +92,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     model: 'claude-sonnet-4-6',
     skill: '.agentic-flow/skills/testing.md',
     contextMode: 'summary',
-    contextStepIds: ['spec', 'implementation-plan', 'implement', 'fix'],
+    contextStepIds: ['spec', 'implementation-plan', 'formal-precheck', 'implement', 'fix'],
     goal: 'Add or update tests and summarize verification results.',
   },
   {
@@ -92,7 +102,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     model: 'gpt-5.4',
     skill: '.agentic-flow/skills/security.md',
     contextMode: 'summary',
-    contextStepIds: ['spec', 'architecture', 'implement', 'fix'],
+    contextStepIds: ['spec', 'architecture', 'formal-precheck', 'implement', 'fix'],
     goal: 'Review security impact, unsafe flows and hardening gaps.',
   },
   {
@@ -102,7 +112,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     model: 'gpt-5.4-mini',
     skill: '.agentic-flow/skills/docs.md',
     contextMode: 'summary',
-    contextStepIds: ['spec', 'implementation-plan', 'implement', 'review', 'fix', 'test', 'security'],
+    contextStepIds: ['spec', 'implementation-plan', 'formal-precheck', 'implement', 'review', 'fix', 'test', 'security'],
     goal: 'Update the documentation and operational notes required by the change.',
   },
   {
@@ -113,7 +123,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     executor: 'hard-check',
     skill: '.agentic-flow/skills/hard-check.md',
     contextMode: 'summary',
-    contextStepIds: ['spec', 'implementation-plan', 'implement', 'fix', 'test', 'docs'],
+    contextStepIds: ['spec', 'implementation-plan', 'formal-precheck', 'implement', 'fix', 'test', 'docs'],
     goal: 'Try to boot the generated application for real, read runtime logs, fix startup issues and retry a bounded number of times.',
     hardCheck: {
       strategy: 'auto',

@@ -18,21 +18,22 @@ Sessions are persistent. You can continue the same session with an additional re
 
 ## Pipeline
 
-Default 11-step flow — each step can be toggled, reassigned to a different model, or given a custom skill file:
+Default 12-step flow — each step can be toggled, reassigned to a different model, or given a custom skill file:
 
 | # | Step | Default model |
 |---|---|---|
 | 1 | 📋 Refine Specification | claude-sonnet-4-6 |
 | 2 | 🏛 Architecture Breakdown | claude-sonnet-4-6 |
 | 3 | 🗺 Development Plan | claude-sonnet-4-6 |
-| 4 | 🛠 Implement | claude-sonnet-4-6 |
-| 5 | 🔍 Technical Review | gpt-5.4 |
-| 6 | 🧯 Fix Findings _(runs only if issues found)_ | claude-sonnet-4-6 |
-| 7 | 🧪 Tests & Verification | claude-sonnet-4-6 |
-| 8 | 🔒 Security Review | gpt-5.4 |
-| 9 | 📚 Documentation | gpt-5.4-mini |
-| 10 | 💥 Runtime Hard Check _(optional, disabled by default)_ | claude-sonnet-4-6 |
-| 11 | ✅ Final Report | gpt-5.4-mini |
+| 4 | 🧭 Formal Pre-Check | gpt-5.4 |
+| 5 | 🛠 Implement | claude-sonnet-4-6 |
+| 6 | 🔍 Technical Review | gpt-5.4 |
+| 7 | 🧯 Fix Findings _(runs only if issues found)_ | claude-sonnet-4-6 |
+| 8 | 🧪 Tests & Verification | claude-sonnet-4-6 |
+| 9 | 🔒 Security Review | gpt-5.4 |
+| 10 | 📚 Documentation | gpt-5.4-mini |
+| 11 | 💥 Runtime Hard Check _(optional, disabled by default)_ | claude-sonnet-4-6 |
+| 12 | ✅ Final Report | gpt-5.4-mini |
 
 ## Token strategy
 
@@ -93,6 +94,14 @@ Custom CLIs and local OpenAI-compatible servers can still be added in `config.js
 ## Runtime Hard Check
 
 The optional `💥 Runtime Hard Check` step is a separate executor, not just another prompt. It tries to determine how the generated project should boot, runs it for real, captures logs, and if startup fails it can ask the selected model to fix the workspace and retry a bounded number of times.
+
+The new `🧭 Formal Pre-Check` step runs before implementation and is meant to catch:
+
+- mismatched producer/consumer contracts
+- missing config or env assumptions
+- hidden startup dependencies
+- logic gaps and sequencing errors
+- structural coupling that would make implementation brittle
 
 Current auto-detection order:
 
