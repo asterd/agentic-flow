@@ -3,8 +3,8 @@
 // ─────────────────────────────────────────────────────────────
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
-import { v4 as uuid } from 'uuid';
 import type {
   AgenticFlowConfig,
   CliInfo,
@@ -105,7 +105,7 @@ export class WorkflowEngine {
     }));
 
     this._state = {
-      runId: uuid(),
+      runId: randomUUID(),
       sessionId: this._session.sessionId,
       iteration: this._session.iteration,
       startedAt: Date.now(),
@@ -196,7 +196,7 @@ export class WorkflowEngine {
     }
 
     return {
-      sessionId: uuid(),
+      sessionId: randomUUID(),
       title: titleFromTask(task),
       createdAt: now,
       updatedAt: now,

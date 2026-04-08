@@ -4,10 +4,23 @@
   "description": "Multi-model AI development pipeline orchestrator. Spec → Plan → Build → Review → Test → Security → Done.",
   "version": "1.0.0",
   "publisher": "agentic-flow",
-  "engines": { "vscode": "^1.95.0" },
-  "categories": ["AI", "Other"],
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
   "icon": "media/icon.png",
-  "keywords": ["ai", "agent", "claude", "openai", "codex", "pipeline", "workflow"],
+  "keywords": [
+    "ai",
+    "agent",
+    "claude",
+    "openai",
+    "codex",
+    "pipeline",
+    "workflow"
+  ],
   "activationEvents": [
     "onView:agenticFlow.panel",
     "onCommand:agenticFlow.open",
@@ -81,15 +94,33 @@
     ],
     "menus": {
       "commandPalette": [
-        { "command": "agenticFlow.open" },
-        { "command": "agenticFlow.refreshModels" },
-        { "command": "agenticFlow.initWorkspace" },
-        { "command": "agenticFlow.openSettings" },
-        { "command": "agenticFlow.openWorkspaceConfig" },
-        { "command": "agenticFlow.openRuntimeEnv" },
-        { "command": "agenticFlow.revealSkillsFolder" },
-        { "command": "agenticFlow.setProviderApiKey" },
-        { "command": "agenticFlow.clearProviderApiKey" }
+        {
+          "command": "agenticFlow.open"
+        },
+        {
+          "command": "agenticFlow.refreshModels"
+        },
+        {
+          "command": "agenticFlow.initWorkspace"
+        },
+        {
+          "command": "agenticFlow.openSettings"
+        },
+        {
+          "command": "agenticFlow.openWorkspaceConfig"
+        },
+        {
+          "command": "agenticFlow.openRuntimeEnv"
+        },
+        {
+          "command": "agenticFlow.revealSkillsFolder"
+        },
+        {
+          "command": "agenticFlow.setProviderApiKey"
+        },
+        {
+          "command": "agenticFlow.clearProviderApiKey"
+        }
       ]
     },
     "keybindings": [
@@ -109,7 +140,9 @@
         },
         "agenticFlow.extraCliPaths": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "description": "Additional directories to search for CLI binaries"
         },
@@ -159,50 +192,130 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "enabled": { "type": "boolean", "default": false },
-                "baseUrl": { "type": "string", "default": "https://api.openai.com/v1" },
-                "apiKey": { "type": "string", "default": "", "format": "password" },
-                "modelAllowList": { "type": "array", "items": { "type": "string" }, "default": [] }
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "baseUrl": {
+                  "type": "string",
+                  "default": "https://api.openai.com/v1"
+                },
+                "apiKey": {
+                  "type": "string",
+                  "default": "",
+                  "format": "password"
+                },
+                "modelAllowList": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                }
               }
             },
             "anthropic": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "enabled": { "type": "boolean", "default": false },
-                "baseUrl": { "type": "string", "default": "https://api.anthropic.com/v1" },
-                "apiKey": { "type": "string", "default": "", "format": "password" },
-                "modelAllowList": { "type": "array", "items": { "type": "string" }, "default": [] }
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "baseUrl": {
+                  "type": "string",
+                  "default": "https://api.anthropic.com/v1"
+                },
+                "apiKey": {
+                  "type": "string",
+                  "default": "",
+                  "format": "password"
+                },
+                "modelAllowList": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                }
               }
             },
             "xai": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "enabled": { "type": "boolean", "default": false },
-                "baseUrl": { "type": "string", "default": "https://api.x.ai/v1" },
-                "apiKey": { "type": "string", "default": "", "format": "password" },
-                "modelAllowList": { "type": "array", "items": { "type": "string" }, "default": [] }
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "baseUrl": {
+                  "type": "string",
+                  "default": "https://api.x.ai/v1"
+                },
+                "apiKey": {
+                  "type": "string",
+                  "default": "",
+                  "format": "password"
+                },
+                "modelAllowList": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                }
               }
             },
             "openrouter": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "enabled": { "type": "boolean", "default": false },
-                "baseUrl": { "type": "string", "default": "https://openrouter.ai/api/v1" },
-                "apiKey": { "type": "string", "default": "", "format": "password" },
-                "modelAllowList": { "type": "array", "items": { "type": "string" }, "default": [] }
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "baseUrl": {
+                  "type": "string",
+                  "default": "https://openrouter.ai/api/v1"
+                },
+                "apiKey": {
+                  "type": "string",
+                  "default": "",
+                  "format": "password"
+                },
+                "modelAllowList": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                }
               }
             },
             "ollama": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "enabled": { "type": "boolean", "default": false },
-                "baseUrl": { "type": "string", "default": "http://localhost:11434/v1" },
-                "apiKey": { "type": "string", "default": "", "format": "password" },
-                "modelAllowList": { "type": "array", "items": { "type": "string" }, "default": [] }
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "baseUrl": {
+                  "type": "string",
+                  "default": "http://localhost:11434/v1"
+                },
+                "apiKey": {
+                  "type": "string",
+                  "default": "",
+                  "format": "password"
+                },
+                "modelAllowList": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                }
               }
             }
           }
@@ -220,14 +333,10 @@
     "dev:host:insiders": "code-insiders . --new-window --extensionDevelopmentPath=. --user-data-dir ./.vscode-test/user-data --extensions-dir ./.vscode-test/extensions",
     "dev:host:workspace": "mkdir -p ./.vscode-test/workspace && code ./.vscode-test/workspace --new-window --extensionDevelopmentPath=. --user-data-dir ./.vscode-test/user-data --extensions-dir ./.vscode-test/extensions"
   },
-  "dependencies": {
-    "uuid": "^9.0.0"
-  },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "@types/uuid": "^9.0.0",
     "@types/vscode": "^1.95.0",
-    "typescript": "^5.3.0",
-    "@vscode/vsce": "^2.24.0"
+    "@vscode/vsce": "^2.24.0",
+    "typescript": "^5.3.0"
   }
 }
