@@ -8,6 +8,7 @@ export type RunMode = 'new' | 'continue';
 export type StepRunCondition = 'always' | 'ifIssues';
 export type StepResultStatus = 'ok' | 'issues' | 'blocked';
 export type StepExecutor = 'model' | 'hard-check';
+export type RunProfileId = 'lite' | 'standard' | 'full' | 'custom';
 export type ModelSource = 'cli' | 'api' | 'vscode';
 export type TokenAccounting = 'estimated' | 'reported';
 export type ApiProviderId = 'openai' | 'anthropic' | 'xai' | 'openrouter' | 'ollama';
@@ -103,6 +104,7 @@ export interface HardCheckConfig {
 
 export interface AgenticFlowConfig {
   version: string;
+  runProfile?: RunProfileId;
   steps: StepConfig[];
   stateFile?: string;
   sessionFile?: string;

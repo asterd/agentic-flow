@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { AgenticFlowConfig, CliInfo, ExtToWebMsg, ModelInfo, WebToExtMsg } from './types';
-import { ensureWorkspaceFile, loadConfig, loadSessionState, resetLocalSettings, saveConfig } from './configManager';
+import { RUN_PROFILE_PRESETS, ensureWorkspaceFile, loadConfig, loadSessionState, resetLocalSettings, saveConfig } from './configManager';
 import { WorkflowEngine } from './workflowEngine';
 
 // ── Sidebar WebviewView Provider (activity bar) ───────────────
@@ -29,7 +29,7 @@ export class AgenticFlowSidebarProvider implements vscode.WebviewViewProvider {
     };
 
     const cssUri = view.webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'panel.css'));
-    view.webview.html = getWebviewHtml(cssUri.toString());
+    view.webview.html = getWebviewHtml(cssUri.toString(), RUN_PROFILE_PRESETS);
 
     const ctx = this._getContext();
     this._engine = ctx.engine;
@@ -220,7 +220,7 @@ export class AgenticFlowPanel {
     this._config = loadConfig();
 
     const cssUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'panel.css'));
-    this._panel.webview.html = getWebviewHtml(cssUri.toString());
+    this._panel.webview.html = getWebviewHtml(cssUri.toString(), RUN_PROFILE_PRESETS);
 
     this.bindEngine();
 
@@ -365,7 +365,10 @@ function skillTemplateForPath(skillPath: string): string {
   ].join('\n');
 }
 
-function getWebviewHtml(cssUri: string): string {
+function getWebviewHtml(
+  cssUri: string,
+  runProfiles: Record<string, { label: string; description: string; enabledStepIds: string[] }>,
+): string {
   return /* html */`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -491,8 +494,10 @@ function getWebviewHtml(cssUri: string): string {
 </div>
 <script>
 const vscode = acquireVsCodeApi();
+const runProfiles = ${JSON.stringify(runProfiles)};
 let models = [], config = null, session = null, runState = null;
 let sessionOverrides = {}; // { [stepId]: { enabled, model, skill } }
+let sessionRunProfile = 'custom';
 const stepLogs = {};
 
 // ── Messages in ───────────────────────────────────────────────
@@ -500,6 +505,7 @@ window.addEventListener('message', ({ data }) => {
   switch (data.type) {
     case 'init':
       models = data.models; config = data.config; session = data.session;
+      if (!Object.keys(sessionOverrides).length) sessionRunProfile = config?.runProfile || 'standard';
       updateSessionStrip();
       updateNoModelsBar();
       renderSettingsConfig();
@@ -521,6 +527,7 @@ window.addEventListener('message', ({ data }) => {
       if (!session) {
         runState = null;
         sessionOverrides = {};
+        sessionRunProfile = config?.runProfile || 'standard';
         clearFeed();
         show('welcome');
       }
@@ -823,10 +830,25 @@ function closeSessionConfig() {
 function renderSessionConfig() {
   if (!config) return;
   const body = document.getElementById('scBody');
+  const profileOptions = [
+    ['lite', 'Lite'],
+    ['standard', 'Standard'],
+    ['full', 'Full'],
+    ['custom', 'Custom'],
+  ].map(([value, label]) => \`<option value="\${value}" \${sessionRunProfile === value ? 'selected' : ''}>\${label}</option>\`).join('');
   // Build effective state: config defaults merged with current sessionOverrides
   body.innerHTML = \`
     <div style="padding:7px 12px 4px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--border)">
       Applies to the next run only — does not change global config
+    </div>
+    <div style="padding:12px 12px 10px;border-bottom:1px solid var(--border);margin-bottom:4px">
+      <label class="cfg-field">Run profile for next execution
+        <select id="scRunProfile">\${profileOptions}</select>
+      </label>
+      <div id="scRunProfileDesc" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button type="button" class="btn-tiny" id="btnApplySessionProfile">Apply preset to this run</button>
+      </div>
     </div>
     \` + config.steps.map((step, i) => {
     const ov = sessionOverrides[step.id] || {};
@@ -854,6 +876,21 @@ function renderSessionConfig() {
         </div>
       </div>\`;
   }).join('');
+
+  const profileSelect = document.getElementById('scRunProfile');
+  const syncProfileDescription = () => {
+    const selected = profileSelect.value;
+    const desc = document.getElementById('scRunProfileDesc');
+    desc.textContent = selected === 'custom'
+      ? 'Custom keeps the current per-run step overrides as-is.'
+      : (runProfiles[selected]?.description || '');
+  };
+  profileSelect.onchange = () => {
+    sessionRunProfile = profileSelect.value;
+    syncProfileDescription();
+  };
+  syncProfileDescription();
+  document.getElementById('btnApplySessionProfile').onclick = () => applyProfilePresetToUi(profileSelect.value, 'session');
 }
 
 function toggleScStep(e, label) {
@@ -863,6 +900,8 @@ function toggleScStep(e, label) {
 
 function applySessionConfig() {
   if (!config) return;
+  const profileSelect = document.getElementById('scRunProfile');
+  if (profileSelect) sessionRunProfile = profileSelect.value;
   sessionOverrides = {};
   document.querySelectorAll('#scBody .cfg-step').forEach(el => {
     const stepId = el.dataset.stepId;
@@ -884,6 +923,7 @@ function applySessionConfig() {
 
 function resetSessionConfig() {
   sessionOverrides = {};
+  sessionRunProfile = 'custom';
   renderSessionConfig();
   syncSessionOverrideButton(true);
   toast('Overrides cleared');
@@ -900,7 +940,25 @@ function renderSettingsConfig() {
 }
 
 function renderStepsConfig() {
-  document.getElementById('stepsConfig').innerHTML = config.steps.map(step => {
+  const profile = config.runProfile || 'standard';
+  const profileOptions = [
+    ['lite', 'Lite'],
+    ['standard', 'Standard'],
+    ['full', 'Full'],
+    ['custom', 'Custom'],
+  ].map(([value, label]) => \`<option value="\${value}" \${profile === value ? 'selected' : ''}>\${label}</option>\`).join('');
+
+  document.getElementById('stepsConfig').innerHTML = \`
+    <div style="padding:0 0 12px;border-bottom:1px solid var(--border);margin-bottom:12px">
+      <label class="cfg-field">Run profile
+        <select id="cfgRunProfile">\${profileOptions}</select>
+      </label>
+      <div id="cfgRunProfileDesc" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button type="button" class="btn-tiny" id="btnApplyRunProfile">Apply preset to step toggles</button>
+      </div>
+    </div>
+  \` + config.steps.map(step => {
     const mOpts = renderModelOptions(step.model);
     const cOpts = ['summary','full','none'].map(c =>
       \`<option value="\${c}" \${(step.contextMode || 'summary') === c ? 'selected' : ''}>\${c}</option>\`
@@ -924,6 +982,18 @@ function renderStepsConfig() {
         </div>
       </div>\`;
   }).join('');
+
+  const profileSelect = document.getElementById('cfgRunProfile');
+  const syncProfileDescription = () => {
+    const selected = profileSelect.value;
+    const desc = document.getElementById('cfgRunProfileDesc');
+    desc.textContent = selected === 'custom'
+      ? 'Custom keeps the current enabled/disabled step toggles as-is.'
+      : (runProfiles[selected]?.description || '');
+  };
+  profileSelect.onchange = syncProfileDescription;
+  syncProfileDescription();
+  document.getElementById('btnApplyRunProfile').onclick = () => applyProfilePresetToUi(profileSelect.value);
 }
 
 function toggleCfgStep(e, label) {
@@ -959,6 +1029,8 @@ function envRow(k, v) {
 }
 
 function saveConfig() {
+  const selectedProfile = document.getElementById('cfgRunProfile')?.value || 'standard';
+  config.runProfile = selectedProfile;
   document.querySelectorAll('#stepsConfig .cfg-step').forEach(el => {
     const step = config.steps.find(s => s.id === el.dataset.stepId);
     if (!step) return;
@@ -978,6 +1050,23 @@ function saveConfig() {
   });
   config.runtime.env = env;
   vscode.postMessage({ type: 'saveConfig', config });
+}
+
+function applyProfilePresetToUi(profile, target = 'settings') {
+  const preset = runProfiles[profile];
+  if (!preset) return;
+  const enabled = new Set(preset.enabledStepIds || []);
+  const rootSelector = target === 'session' ? '#scBody .cfg-step' : '#stepsConfig .cfg-step';
+  const inputSelector = target === 'session' ? '.sc-enabled' : '.cfg-enabled';
+  document.querySelectorAll(rootSelector).forEach(el => {
+    const checked = enabled.has(el.dataset.stepId);
+    const input = el.querySelector(inputSelector);
+    const name = el.querySelector('.cfg-step-toggle-name');
+    input.checked = checked;
+    if (name) name.style.opacity = checked ? '' : '.5';
+  });
+  if (target === 'session') sessionRunProfile = profile;
+  toast(\`Applied \${profile} profile to \${target === 'session' ? 'next run' : 'step toggles'}\`);
 }
 
 // ── Utils ─────────────────────────────────────────────────────

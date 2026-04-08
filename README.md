@@ -18,22 +18,28 @@ Sessions are persistent. You can continue the same session with an additional re
 
 ## Pipeline
 
-Default 12-step flow — each step can be toggled, reassigned to a different model, or given a custom skill file:
+Default pipeline — each step can be toggled, reassigned to a different model, or given a custom skill file:
 
 | # | Step | Default model |
 |---|---|---|
 | 1 | 📋 Refine Specification | claude-sonnet-4-6 |
 | 2 | 🏛 Architecture Breakdown | claude-sonnet-4-6 |
-| 3 | 🗺 Development Plan | claude-sonnet-4-6 |
+| 3 | 🗺 Development Plan _(full profile)_ | claude-sonnet-4-6 |
 | 4 | 🧭 Formal Pre-Check | gpt-5.4 |
 | 5 | 🛠 Implement | claude-sonnet-4-6 |
 | 6 | 🔍 Technical Review | gpt-5.4 |
 | 7 | 🧯 Fix Findings _(runs only if issues found)_ | claude-sonnet-4-6 |
-| 8 | 🧪 Tests & Verification | claude-sonnet-4-6 |
-| 9 | 🔒 Security Review | gpt-5.4 |
-| 10 | 📚 Documentation | gpt-5.4-mini |
-| 11 | 💥 Runtime Hard Check _(optional, disabled by default)_ | claude-sonnet-4-6 |
+| 8 | 🧪 Tests & Verification _(full profile)_ | claude-sonnet-4-6 |
+| 9 | 🔒 Security Review _(full profile)_ | gpt-5.4 |
+| 10 | 📚 Documentation _(full profile)_ | gpt-5.4-mini |
+| 11 | 💥 Runtime Hard Check _(full profile / optional)_ | claude-sonnet-4-6 |
 | 12 | ✅ Final Report | gpt-5.4-mini |
+
+Recommended run profiles:
+
+- `lite` — `spec`, `implement`, `review`, `fix`, `final-report`
+- `standard` — `spec`, `architecture`, `formal-precheck`, `implement`, `review`, `fix`, `final-report`
+- `full` — enables every step, including planning, test/security/docs, and hard-check
 
 ## Token strategy
 
@@ -102,6 +108,8 @@ The new `🧭 Formal Pre-Check` step runs before implementation and is meant to 
 - hidden startup dependencies
 - logic gaps and sequencing errors
 - structural coupling that would make implementation brittle
+
+For UI-heavy tasks, prefer assigning the optional skill [ui-direction.md](/Users/ddurzo/Development/misc/agentic-flow/skills/ui-direction.md) to `architecture` or `formal-precheck` instead of adding a permanent extra step to every run.
 
 Current auto-detection order:
 

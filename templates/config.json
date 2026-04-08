@@ -1,5 +1,6 @@
 {
   "version": "2.0",
+  "runProfile": "standard",
   "stateFile": ".agentic-flow/WORKFLOW_STATE.md",
   "sessionFile": ".agentic-flow/session.json",
   "summaryMaxTokens": 250,
@@ -36,7 +37,7 @@
     {
       "id": "implementation-plan",
       "name": "🗺 Development Plan",
-      "enabled": true,
+      "enabled": false,
       "model": "claude-sonnet-4-6",
       "skill": ".agentic-flow/skills/implementation-plan.md",
       "contextMode": "summary",
@@ -87,7 +88,7 @@
     {
       "id": "test",
       "name": "🧪 Tests & Verification",
-      "enabled": true,
+      "enabled": false,
       "model": "claude-sonnet-4-6",
       "skill": ".agentic-flow/skills/testing.md",
       "contextMode": "summary",
@@ -97,7 +98,7 @@
     {
       "id": "security",
       "name": "🔒 Security Review",
-      "enabled": true,
+      "enabled": false,
       "model": "gpt-5.4",
       "skill": ".agentic-flow/skills/security.md",
       "contextMode": "summary",
@@ -107,7 +108,7 @@
     {
       "id": "docs",
       "name": "📚 Documentation",
-      "enabled": true,
+      "enabled": false,
       "model": "gpt-5.4-mini",
       "skill": ".agentic-flow/skills/docs.md",
       "contextMode": "summary",

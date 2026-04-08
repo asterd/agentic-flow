@@ -4,7 +4,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { AgenticFlowConfig, SessionState, StepConfig } from './types';
+import type { AgenticFlowConfig, RunProfileId, SessionState, StepConfig } from './types';
 
 const DEFAULT_STORAGE_DIR = '.agentic-flow';
 const CONFIG_BASENAME = 'config.json';
@@ -12,6 +12,24 @@ const STATE_BASENAME = 'WORKFLOW_STATE.md';
 const SESSION_BASENAME = 'session.json';
 const RUNTIME_ENV_BASENAME = 'runtime.env';
 const SKILLS_DIRNAME = 'skills';
+
+export const RUN_PROFILE_PRESETS: Record<Exclude<RunProfileId, 'custom'>, { label: string; description: string; enabledStepIds: string[] }> = {
+  lite: {
+    label: 'Lite',
+    description: 'Fastest practical flow for small or iterative changes.',
+    enabledStepIds: ['spec', 'implement', 'review', 'fix', 'final-report'],
+  },
+  standard: {
+    label: 'Standard',
+    description: 'Balanced flow with architecture and formal pre-check before coding.',
+    enabledStepIds: ['spec', 'architecture', 'formal-precheck', 'implement', 'review', 'fix', 'final-report'],
+  },
+  full: {
+    label: 'Full',
+    description: 'Extended flow with planning, testing, security, docs and runtime verification.',
+    enabledStepIds: ['spec', 'architecture', 'implementation-plan', 'formal-precheck', 'implement', 'review', 'fix', 'test', 'security', 'docs', 'hard-check', 'final-report'],
+  },
+};
 
 const DEFAULT_STEPS: StepConfig[] = [
   {
@@ -37,7 +55,7 @@ const DEFAULT_STEPS: StepConfig[] = [
   {
     id: 'implementation-plan',
     name: '🗺 Development Plan',
-    enabled: true,
+    enabled: false,
     model: 'claude-sonnet-4-6',
     skill: '.agentic-flow/skills/implementation-plan.md',
     contextMode: 'summary',
@@ -88,7 +106,7 @@ const DEFAULT_STEPS: StepConfig[] = [
   {
     id: 'test',
     name: '🧪 Tests & Verification',
-    enabled: true,
+    enabled: false,
     model: 'claude-sonnet-4-6',
     skill: '.agentic-flow/skills/testing.md',
     contextMode: 'summary',
@@ -98,7 +116,7 @@ const DEFAULT_STEPS: StepConfig[] = [
   {
     id: 'security',
     name: '🔒 Security Review',
-    enabled: true,
+    enabled: false,
     model: 'gpt-5.4',
     skill: '.agentic-flow/skills/security.md',
     contextMode: 'summary',
@@ -108,7 +126,7 @@ const DEFAULT_STEPS: StepConfig[] = [
   {
     id: 'docs',
     name: '📚 Documentation',
-    enabled: true,
+    enabled: false,
     model: 'gpt-5.4-mini',
     skill: '.agentic-flow/skills/docs.md',
     contextMode: 'summary',
@@ -145,6 +163,7 @@ const DEFAULT_STEPS: StepConfig[] = [
 
 export const DEFAULT_CONFIG: AgenticFlowConfig = {
   version: '2.0',
+  runProfile: 'standard',
   steps: DEFAULT_STEPS,
   stateFile: path.join(DEFAULT_STORAGE_DIR, STATE_BASENAME),
   sessionFile: path.join(DEFAULT_STORAGE_DIR, SESSION_BASENAME),
@@ -195,6 +214,7 @@ export function loadConfig(): AgenticFlowConfig {
     return {
       ...DEFAULT_CONFIG,
       ...parsed,
+      runProfile: normalizeRunProfile(parsed.runProfile),
       steps: mergeSteps(parsed.steps),
       runtime: {
         ...DEFAULT_CONFIG.runtime,
@@ -234,12 +254,25 @@ function mergeSteps(parsedSteps?: StepConfig[]): StepConfig[] {
   return merged;
 }
 
+export function normalizeRunProfile(profile?: string): RunProfileId {
+  return profile === 'lite' || profile === 'standard' || profile === 'full' || profile === 'custom'
+    ? profile
+    : 'standard';
+}
+
+export function applyRunProfileToSteps(steps: StepConfig[], profile: RunProfileId): StepConfig[] {
+  if (profile === 'custom') return structuredClone(steps);
+  const preset = RUN_PROFILE_PRESETS[profile];
+  const enabled = new Set(preset.enabledStepIds);
+  return steps.map(step => ({ ...step, enabled: enabled.has(step.id) }));
+}
+
 export function saveConfig(config: AgenticFlowConfig): void {
   const dir = getAgenticFlowDir();
   if (!dir) throw new Error('No workspace open');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const p = path.join(dir, CONFIG_BASENAME);
-  fs.writeFileSync(p, JSON.stringify(config, null, 2), 'utf8');
+  fs.writeFileSync(p, JSON.stringify({ ...config, runProfile: normalizeRunProfile(config.runProfile) }, null, 2), 'utf8');
 }
 
 export async function initWorkspace(defaultModel?: string): Promise<void> {
