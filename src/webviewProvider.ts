@@ -44,7 +44,7 @@ export class AgenticFlowSidebarProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  refresh(engine: WorkflowEngine, models: ModelInfo[], clis: CliInfo[]): void {
+  refresh(engine: WorkflowEngine | undefined, models: ModelInfo[], clis: CliInfo[]): void {
     this._engine = engine;
     this._models = models;
     this._clis = clis;

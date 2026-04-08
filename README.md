@@ -47,6 +47,7 @@ Default 10-step flow — each step can be toggled, reassigned to a different mod
 - The settings page links directly to the real workspace files under `.agentic-flow/`
 - The sidebar focuses on runs and per-session overrides; model selectors are grouped by source
 - API-backed runs report precise token usage when the provider exposes it
+- API discovery now happens after activation, so a slow provider should no longer block the extension from loading
 - Skill files can be opened directly from per-run overrides
 - `Reset local settings` rebuilds `.agentic-flow/` from defaults for the current workspace
 
@@ -96,6 +97,12 @@ Useful settings:
 - `agenticFlow.apiProviders` configures OpenAI, Anthropic, xAI, OpenRouter, and Ollama API access
 - `agenticFlow.workspaceStorageDir` changes where workspace-local files such as `config.json`, `runtime.env`, `session.json`, and `skills/` are stored
 - `agenticFlow.extraCliPaths` adds extra directories for local CLI autodetection
+
+Recommended key storage:
+
+- Preferred: `Agentic Flow: Store Provider API Key` saves the key in VS Code secret storage
+- Compatible fallback: `agenticFlow.apiProviders.<provider>.apiKey` in settings
+- Workspace-local fallback: `.agentic-flow/runtime.env`
 
 ```json
 {
@@ -151,6 +158,7 @@ Model selection behavior:
 - If the same family is available from multiple sources, the selector shows separate grouped entries such as `Local CLI · Anthropic` and `API · Anthropic`
 - Existing configs that still reference plain model names continue to work; the extension resolves them to the best available source, preferring local CLI first
 - API-backed runs store precise token usage when the provider returns it, while CLI-backed runs keep the existing estimated accounting
+- OpenAI-compatible discovery applies a conservative filter so obvious non-chat endpoints like embeddings, moderation, TTS, Whisper, and image-generation models are not shown as runnable chat models
 
 ## Architecture
 
@@ -229,6 +237,7 @@ This writes the packaged extension to `dist/` and is the same path used by GitHu
 - CI rewrites the extension version only inside the runner to a unique prerelease form like `1.0.0-ci.42`, so each generated build is installable as a distinct package
 - The workflow forces GitHub JavaScript actions to run on Node 24 to avoid the Node 20 deprecation warning from GitHub-hosted runners
 - Packaging includes a real extension icon and bundled MIT license, so `vsce package` succeeds cleanly in CI as well as locally
+- The packaged `.vsix` excludes development-only folders like `.github/` and `.claude/`
 
 ---
 

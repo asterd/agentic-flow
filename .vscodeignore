@@ -1,4 +1,6 @@
 **/.gitignore
+**/.github/**
+**/.claude/**
 **/.vscode/**
 **/node_modules/**
 **/src/**

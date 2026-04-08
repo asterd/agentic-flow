@@ -4,16 +4,18 @@
 import * as vscode from 'vscode';
 import { detectEnvironment } from './cliDetector';
 import { getAgenticFlowDir, getRuntimeEnvPath, getSkillsDir, getStorageDirSetting, initWorkspace } from './configManager';
+import { getProviderDefinitions } from './providerConfig';
+import { deleteProviderApiKeySecret, initializeSecretStorage, setProviderApiKeySecret } from './secretStorage';
 import { WorkflowEngine } from './workflowEngine';
 import { AgenticFlowSidebarProvider } from './webviewProvider';
-import type { CliInfo, ModelInfo } from './types';
+import type { ApiProviderId, CliInfo, ModelInfo } from './types';
 
 let _clis: CliInfo[] = [];
 let _models: ModelInfo[] = [];
 let _engine: WorkflowEngine | undefined;
 
 export async function activate(ctx: vscode.ExtensionContext) {
-  await refreshEnvironment();
+  initializeSecretStorage(ctx);
 
   // Register sidebar WebviewView provider (activity bar panel)
   const sidebarProvider = new AgenticFlowSidebarProvider(ctx.extensionUri, () => ({
@@ -43,7 +45,7 @@ export async function activate(ctx: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand('agenticFlow.refreshModels', async () => {
       await refreshEnvironment();
-      sidebarProvider.refresh(_engine!, _models, _clis);
+      sidebarProvider.refresh(_engine, _models, _clis);
       vscode.window.showInformationMessage(
         `[Agentic Flow] Detected ${_clis.length} CLI(s), ${_models.length} model(s).`,
       );
@@ -92,6 +94,33 @@ export async function activate(ctx: vscode.ExtensionContext) {
       }
       await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(skillsDir));
     }),
+
+    vscode.commands.registerCommand('agenticFlow.setProviderApiKey', async () => {
+      const providerId = await pickProvider('Store API key for which provider?');
+      if (!providerId) return;
+      const label = getProviderDefinitions()[providerId].label;
+      const value = await vscode.window.showInputBox({
+        title: `Agentic Flow: ${label} API key`,
+        password: true,
+        ignoreFocusOut: true,
+        prompt: `Store the ${label} API key in VS Code secret storage`,
+      });
+      if (!value?.trim()) return;
+      await setProviderApiKeySecret(providerId, value);
+      await refreshEnvironment();
+      sidebarProvider.refresh(_engine, _models, _clis);
+      vscode.window.showInformationMessage(`[Agentic Flow] Stored ${label} API key in secret storage.`);
+    }),
+
+    vscode.commands.registerCommand('agenticFlow.clearProviderApiKey', async () => {
+      const providerId = await pickProvider('Clear API key for which provider?');
+      if (!providerId) return;
+      const label = getProviderDefinitions()[providerId].label;
+      await deleteProviderApiKeySecret(providerId);
+      await refreshEnvironment();
+      sidebarProvider.refresh(_engine, _models, _clis);
+      vscode.window.showInformationMessage(`[Agentic Flow] Cleared ${label} API key from secret storage.`);
+    }),
   );
 
   const watcher = vscode.workspace.createFileSystemWatcher(`**/${getStorageDirSetting()}/config.json`);
@@ -103,9 +132,15 @@ export async function activate(ctx: vscode.ExtensionContext) {
   ctx.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
     if (!event.affectsConfiguration('agenticFlow')) return;
     void refreshEnvironment().then(() => {
-      if (_engine) sidebarProvider.refresh(_engine, _models, _clis);
+      sidebarProvider.refresh(_engine, _models, _clis);
     });
   }));
+
+  void refreshEnvironment().then(() => {
+    sidebarProvider.refresh(_engine, _models, _clis);
+  }, err => {
+    console.error('[Agentic Flow] Environment refresh failed during activation.', err);
+  });
 }
 
 export function deactivate() {}
@@ -124,4 +159,14 @@ function ensureEngine(workspaceRoot: string) {
     return;
   }
   _engine.setEnvironment(_models, _clis);
+}
+
+async function pickProvider(placeHolder: string): Promise<ApiProviderId | undefined> {
+  const items = Object.values(getProviderDefinitions()).map(provider => ({
+    label: provider.label,
+    description: provider.id,
+    providerId: provider.id,
+  }));
+  const selection = await vscode.window.showQuickPick(items, { placeHolder, ignoreFocusOut: true });
+  return selection?.providerId;
 }

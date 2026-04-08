@@ -4,3 +4,6 @@ out/
 *.js.map
 .env
 .env.local
+.agentic-flow/runtime.env
+.agentic-flow/session.json
+.agentic-flow/WORKFLOW_STATE.md

@@ -5,9 +5,8 @@ import * as path from 'path';
 import { promisify } from 'util';
 import * as vscode from 'vscode';
 import { loadConfig } from './configManager';
-import { getConfiguredApiProviders, getProviderDefinitions, providerDefaultModels, providerRequiresApiKey } from './providerConfig';
+import { getConfiguredApiProviders, providerDefaultModels, providerRequiresApiKey } from './providerConfig';
 import type {
-  ApiProviderId,
   CliInfo,
   CustomCliConfig,
   CustomModelConfig,
@@ -29,7 +28,7 @@ interface CliDescriptor {
 const KNOWN_CLIS: CliDescriptor[] = [
   {
     id: 'claude',
-    providerLabel: 'Anthropic',
+    providerLabel: 'Claude Code',
     bins: ['claude'],
     versionFlag: '--version',
     staticModels: [
@@ -98,7 +97,7 @@ export async function detectEnvironment(): Promise<DetectedEnvironment> {
     upsertModel(models, customModelToModelInfo(customModel));
   }
 
-  const providerSettings = getConfiguredApiProviders();
+  const providerSettings = await getConfiguredApiProviders();
   for (const provider of Object.values(providerSettings)) {
     const apiModels = await queryApiModels(provider);
     for (const model of apiModels) upsertModel(models, model);
@@ -255,12 +254,35 @@ async function queryApiModels(provider: ResolvedApiProviderSettings): Promise<Mo
 async function fetchProviderModels(provider: ResolvedApiProviderSettings): Promise<ModelInfo[]> {
   switch (provider.id) {
     case 'anthropic':
-      return [];
+      return fetchAnthropicModels(provider);
     case 'ollama':
       return fetchOllamaModels(provider);
     default:
       return fetchOpenAiCompatibleModels(provider);
   }
+}
+
+async function fetchAnthropicModels(provider: ResolvedApiProviderSettings): Promise<ModelInfo[]> {
+  const response = await fetchJson<{ data?: Array<Record<string, unknown>> }>(
+    `${provider.baseUrl}/models`,
+    { method: 'GET', headers: buildApiHeaders(provider) },
+  );
+
+  const items = Array.isArray(response.data) ? response.data : [];
+  return items
+    .map(item => {
+      const modelName = String(item.id ?? '').trim();
+      if (!modelName) return undefined;
+      const displayName = stringOrUndefined(item.display_name)
+        || stringOrUndefined(item.name)
+        || humanizeAnthropicModelName(modelName);
+      return createApiModel(provider, modelName, displayName, {
+        contextWindow: 200_000,
+        description: stringOrUndefined(item.description),
+        discovery: 'cli',
+      });
+    })
+    .filter((model): model is ModelInfo => Boolean(model));
 }
 
 async function fetchOpenAiCompatibleModels(provider: ResolvedApiProviderSettings): Promise<ModelInfo[]> {
@@ -273,7 +295,7 @@ async function fetchOpenAiCompatibleModels(provider: ResolvedApiProviderSettings
   return items
     .map(item => {
       const modelName = String(item.id ?? '').trim();
-      if (!modelName) return undefined;
+      if (!modelName || !isLikelyChatModel(modelName)) return undefined;
       const label = String(item.name ?? item.display_name ?? modelName);
       const pricing = extractPricing(item);
       return createApiModel(provider, modelName, label, {
@@ -500,9 +522,30 @@ function buildApiHeaders(provider: ResolvedApiProviderSettings): Record<string, 
 }
 
 async function fetchJson<T>(url: string, init: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-  return await response.json() as T;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return await response.json() as T;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function isLikelyChatModel(modelName: string): boolean {
+  const name = modelName.toLowerCase();
+  return !(
+    name.includes('embedding')
+    || name.includes('embed-')
+    || name.includes('whisper')
+    || name.includes('tts')
+    || name.includes('transcri')
+    || name.includes('moderation')
+    || name.includes('dall-e')
+    || name.includes('gpt-image')
+    || name.includes('imagegen')
+  );
 }
 
 function numberOrUndefined(value: unknown): number | undefined {
@@ -518,4 +561,37 @@ function parseNumericString(value: unknown): number | undefined {
   if (typeof value !== 'string') return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function humanizeAnthropicModelName(modelName: string): string {
+  const trimmed = modelName.trim();
+  if (!trimmed) return modelName;
+
+  const withoutPrefix = trimmed.replace(/^claude-/, '');
+  const parts = withoutPrefix.split('-');
+  const family = parts[0] ? capitalize(parts[0]) : 'Claude';
+  const versionParts: string[] = [];
+
+  for (let index = 1; index < parts.length; index++) {
+    const part = parts[index];
+    if (/^\d+$/.test(part) && parts[index + 1] && /^\d+$/.test(parts[index + 1])) {
+      versionParts.push(`${part}.${parts[index + 1]}`);
+      index += 1;
+      continue;
+    }
+    if (/^\d{8}$/.test(part)) break;
+    if (part === 'latest') break;
+    versionParts.push(part);
+  }
+
+  const version = versionParts
+    .map(part => /^\d+\.\d+$/.test(part) ? part : capitalize(part))
+    .join(' ')
+    .trim();
+
+  return version ? `Claude ${family} ${version}` : `Claude ${family}`;
+}
+
+function capitalize(value: string): string {
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
 }

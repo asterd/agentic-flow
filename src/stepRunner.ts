@@ -158,11 +158,10 @@ async function runViaApi(
   const providerId = model.apiProviderId;
   if (!providerId) throw new Error(`Model "${model.label}" is missing API provider configuration.`);
 
-  const provider = getConfiguredApiProviders()[providerId];
+  const provider = (await getConfiguredApiProviders())[providerId];
   if (!provider?.enabled) throw new Error(`API provider "${providerId}" is disabled in settings.`);
 
-  const controller = new AbortController();
-  cancellationToken?.onCancellationRequested(() => controller.abort());
+  const controller = createAbortController(90_000, cancellationToken);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -368,4 +367,12 @@ function sumNumbers(...values: Array<number | undefined>): number | undefined {
 function roundUsd(value: number): number | undefined {
   if (!Number.isFinite(value) || value <= 0) return undefined;
   return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+function createAbortController(timeoutMs: number, cancellationToken?: vscode.CancellationToken): AbortController {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  controller.signal.addEventListener('abort', () => clearTimeout(timeout), { once: true });
+  cancellationToken?.onCancellationRequested(() => controller.abort());
+  return controller;
 }

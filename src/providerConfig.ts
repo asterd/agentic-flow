@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { loadConfig, resolveRuntimeEnv } from './configManager';
+import { getProviderApiKeySecret } from './secretStorage';
 import type {
   ApiProviderId,
   ApiProviderSettings,
@@ -42,7 +43,7 @@ const PROVIDER_DEFINITIONS: Record<ApiProviderId, ProviderDefinition> = {
       { id: 'claude-opus-4-1-20250805', label: 'Claude Opus 4.1', contextWindow: 200_000 },
       { id: 'claude-opus-4-20250514', label: 'Claude Opus 4', contextWindow: 200_000 },
       { id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', contextWindow: 200_000 },
-      { id: 'claude-3-7-sonnet-latest', label: 'Claude Sonnet 3.7', contextWindow: 200_000 },
+      { id: 'claude-3-7-sonnet-20250219', label: 'Claude Sonnet 3.7', contextWindow: 200_000 },
       { id: 'claude-3-5-haiku-20241022', label: 'Claude Haiku 3.5', contextWindow: 200_000 },
     ],
   },
@@ -76,16 +77,21 @@ export function getProviderDefinitions(): Record<ApiProviderId, ProviderDefiniti
   return PROVIDER_DEFINITIONS;
 }
 
-export function getConfiguredApiProviders(): Record<ApiProviderId, ResolvedApiProviderSettings> {
+export async function getConfiguredApiProviders(): Promise<Record<ApiProviderId, ResolvedApiProviderSettings>> {
   const settings = vscode.workspace.getConfiguration('agenticFlow').get<Record<string, ApiProviderSettings>>('apiProviders', {});
   const runtimeEnv = resolveRuntimeEnv(loadConfig());
+  const secretEntries = await Promise.all(
+    Object.values(PROVIDER_DEFINITIONS).map(async definition => [definition.id, await getProviderApiKeySecret(definition.id)] as const),
+  );
+  const secretMap = new Map(secretEntries);
 
   return Object.values(PROVIDER_DEFINITIONS).reduce((acc, definition) => {
     const raw = settings?.[definition.id] ?? {};
+    const secretApiKey = secretMap.get(definition.id);
     const envApiKey = definition.apiKeyEnv ? runtimeEnv[definition.apiKeyEnv] : undefined;
-    const apiKey = raw.apiKey?.trim() || envApiKey;
+    const apiKey = secretApiKey || raw.apiKey?.trim() || envApiKey;
     const apiKeySource: ResolvedApiProviderSettings['apiKeySource'] =
-      raw.apiKey?.trim() ? 'settings' : envApiKey ? 'env' : 'none';
+      secretApiKey ? 'secret' : raw.apiKey?.trim() ? 'settings' : envApiKey ? 'env' : 'none';
     const enabled = definition.id === 'ollama'
       ? Boolean(raw.enabled)
       : Boolean(apiKey) || raw.enabled === true;

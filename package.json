@@ -8,7 +8,18 @@
   "categories": ["AI", "Other"],
   "icon": "media/icon.png",
   "keywords": ["ai", "agent", "claude", "openai", "codex", "pipeline", "workflow"],
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onView:agenticFlow.panel",
+    "onCommand:agenticFlow.open",
+    "onCommand:agenticFlow.refreshModels",
+    "onCommand:agenticFlow.initWorkspace",
+    "onCommand:agenticFlow.openSettings",
+    "onCommand:agenticFlow.openWorkspaceConfig",
+    "onCommand:agenticFlow.openRuntimeEnv",
+    "onCommand:agenticFlow.revealSkillsFolder",
+    "onCommand:agenticFlow.setProviderApiKey",
+    "onCommand:agenticFlow.clearProviderApiKey"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -58,6 +69,14 @@
       {
         "command": "agenticFlow.revealSkillsFolder",
         "title": "Agentic Flow: Reveal Skills Folder"
+      },
+      {
+        "command": "agenticFlow.setProviderApiKey",
+        "title": "Agentic Flow: Store Provider API Key"
+      },
+      {
+        "command": "agenticFlow.clearProviderApiKey",
+        "title": "Agentic Flow: Clear Provider API Key"
       }
     ],
     "menus": {
@@ -68,7 +87,9 @@
         { "command": "agenticFlow.openSettings" },
         { "command": "agenticFlow.openWorkspaceConfig" },
         { "command": "agenticFlow.openRuntimeEnv" },
-        { "command": "agenticFlow.revealSkillsFolder" }
+        { "command": "agenticFlow.revealSkillsFolder" },
+        { "command": "agenticFlow.setProviderApiKey" },
+        { "command": "agenticFlow.clearProviderApiKey" }
       ]
     },
     "keybindings": [
@@ -131,7 +152,7 @@
               "modelAllowList": []
             }
           },
-          "markdownDescription": "API providers exposed alongside local CLIs. Keep local CLIs as the default path, then add providers here when you want API-backed models to appear in selectors too. Keys can also come from `.agentic-flow/runtime.env` (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`). For stable behavior, prefer also setting `modelAllowList` when you want to limit discovery.",
+          "markdownDescription": "API providers exposed alongside local CLIs. Keep local CLIs as the default path, then add providers here when you want API-backed models to appear in selectors too. For best security, store keys with [Agentic Flow: Store Provider API Key](command:agenticFlow.setProviderApiKey). Compatibility fallback: keys can still come from this setting or from `.agentic-flow/runtime.env` (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `XAI_API_KEY`, `OPENROUTER_API_KEY`). Prefer also setting `modelAllowList` when you want to limit discovery.",
           "additionalProperties": false,
           "properties": {
             "openai": {

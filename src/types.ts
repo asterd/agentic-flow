@@ -133,7 +133,7 @@ export interface ResolvedApiProviderSettings {
   baseUrl: string;
   modelAllowList: string[];
   extraHeaders: Record<string, string>;
-  apiKeySource: 'settings' | 'env' | 'none';
+  apiKeySource: 'secret' | 'settings' | 'env' | 'none';
 }
 
 export interface TokenUsage {
