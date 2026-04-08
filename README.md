@@ -235,7 +235,7 @@ This writes the packaged extension to `dist/` and is the same path used by GitHu
 - Every push builds and packages a `.vsix` in GitHub Actions as a downloadable workflow artifact
 - Pushes to `main` also refresh the GitHub prerelease `latest-build` with the newest `.vsix`
 - CI rewrites the extension version only inside the runner to a unique prerelease form like `1.0.0-ci.42`, so each generated build is installable as a distinct package
-- The workflow forces GitHub JavaScript actions to run on Node 24 to avoid the Node 20 deprecation warning from GitHub-hosted runners
+- The workflow uses Node 24-native GitHub Actions (`checkout`, `setup-node`, `upload-artifact`) and the GitHub CLI for release publishing, so it no longer depends on deprecated Node 20 action runtimes
 - Packaging includes a real extension icon and bundled MIT license, so `vsce package` succeeds cleanly in CI as well as locally
 - The packaged `.vsix` excludes development-only folders like `.github/` and `.claude/`
 

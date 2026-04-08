@@ -6,9 +6,6 @@ on:
       - '**'
   workflow_dispatch:
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-
 permissions:
   contents: write
 
@@ -22,10 +19,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -54,7 +51,7 @@ jobs:
           npx @vscode/vsce package --allow-missing-repository --out "dist/${VSIX_NAME}"
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.VSIX_NAME }}
           path: dist/${{ env.VSIX_NAME }}
@@ -62,17 +59,30 @@ jobs:
 
       - name: Publish prerelease on main
         if: github.ref == 'refs/heads/main'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest-build
-          name: Latest Build
-          prerelease: true
-          make_latest: false
-          target_commitish: ${{ github.sha }}
-          files: dist/${{ env.VSIX_NAME }}
-          body: |
-            Automated extension build from `${{ github.sha }}`.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          NOTES=$(cat <<EOF
+          Automated extension build from \`${GITHUB_SHA}\`.
 
-            Version: `${{ env.CI_VERSION }}`
-            Branch: `${{ github.ref_name }}`
-            Commit: `${{ github.event.head_commit.message }}`
+          Version: \`${CI_VERSION}\`
+          Branch: \`${GITHUB_REF_NAME}\`
+          Commit: \`${{ github.event.head_commit.message }}\`
+          EOF
+          )
+
+          if gh release view latest-build >/dev/null 2>&1; then
+            gh release upload latest-build "dist/${VSIX_NAME}" --clobber
+            gh release edit latest-build \
+              --title "Latest Build" \
+              --prerelease \
+              --notes "$NOTES"
+          else
+            gh release create latest-build "dist/${VSIX_NAME}" \
+              --title "Latest Build" \
+              --prerelease \
+              --target "${GITHUB_SHA}" \
+              --notes "$NOTES"
+          fi
