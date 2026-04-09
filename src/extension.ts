@@ -3,11 +3,13 @@
 // ─────────────────────────────────────────────────────────────
 import * as vscode from 'vscode';
 import { detectEnvironment } from './cliDetector';
-import { getAgenticFlowDir, getRuntimeEnvPath, getSkillsDir, getStorageDirSetting, initWorkspace } from './configManager';
+import { getAgenticFlowDir, getRuntimeEnvPath, getSkillsDir, getStorageDirSetting, initWorkspace, loadSessionState } from './configManager';
+import { writeRepoMd } from './repoSummaryWriter';
 import { getProviderDefinitions } from './providerConfig';
 import { deleteProviderApiKeySecret, initializeSecretStorage, setProviderApiKeySecret } from './secretStorage';
 import { WorkflowEngine } from './workflowEngine';
 import { AgenticFlowSidebarProvider } from './webviewProvider';
+import { AgenticFlowDocsPanel } from './docsProvider';
 import type { ApiProviderId, CliInfo, ModelInfo } from './types';
 
 let _clis: CliInfo[] = [];
@@ -110,6 +112,23 @@ export async function activate(ctx: vscode.ExtensionContext) {
       await refreshEnvironment();
       sidebarProvider.refresh(_engine, _models, _clis);
       vscode.window.showInformationMessage(`[Agentic Flow] Stored ${label} API key in secret storage.`);
+    }),
+
+    vscode.commands.registerCommand('agenticFlow.openDocs', () => {
+      AgenticFlowDocsPanel.createOrShow(ctx.extensionUri);
+    }),
+
+    vscode.commands.registerCommand('agenticFlow.generateRepoMd', async () => {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root) { vscode.window.showErrorMessage('[Agentic Flow] Open a workspace first.'); return; }
+      const session = loadSessionState();
+      if (!session) { vscode.window.showErrorMessage('[Agentic Flow] No session found. Run the pipeline first.'); return; }
+      const afDir = getAgenticFlowDir();
+      if (!afDir) return;
+      const filePath = writeRepoMd(session, afDir);
+      if (!filePath) { vscode.window.showErrorMessage('[Agentic Flow] Could not write REPO.md.'); return; }
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+      await vscode.window.showTextDocument(doc, { preview: false });
     }),
 
     vscode.commands.registerCommand('agenticFlow.clearProviderApiKey', async () => {

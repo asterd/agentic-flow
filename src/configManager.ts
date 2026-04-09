@@ -4,7 +4,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { AgenticFlowConfig, RunProfileId, SessionState, StepConfig } from './types';
+import type { AgenticFlowConfig, GitContextConfig, ModelRouter, RunProfileId, RuntimeConfig, SessionState, StepConfig } from './types';
 
 const DEFAULT_STORAGE_DIR = '.agentic-flow';
 const CONFIG_BASENAME = 'config.json';
@@ -29,14 +29,35 @@ export const RUN_PROFILE_PRESETS: Record<Exclude<RunProfileId, 'custom'>, { labe
     description: 'Extended flow with planning, testing, security, docs and runtime verification.',
     enabledStepIds: ['spec', 'architecture', 'implementation-plan', 'formal-precheck', 'implement', 'review', 'fix', 'test', 'security', 'docs', 'hard-check', 'final-report'],
   },
+  evolutive: {
+    label: 'Evolutive',
+    description: 'For features and changes on an existing codebase. Starts with diff analysis to understand the current state, then implements and reviews.',
+    enabledStepIds: ['diff-analysis', 'implement', 'review', 'fix', 'final-report'],
+  },
+  hotfix: {
+    label: 'Hotfix',
+    description: 'Minimal flow for urgent fixes. Analyses the diff, implements the fix and closes with a final report.',
+    enabledStepIds: ['diff-analysis', 'implement', 'fix', 'final-report'],
+  },
 };
 
 const DEFAULT_STEPS: StepConfig[] = [
+  {
+    id: 'diff-analysis',
+    name: '🔎 Diff Analysis',
+    enabled: false,
+    model: 'claude-sonnet-4-6',
+    category: 'planning',
+    skill: '.agentic-flow/skills/diff-analysis.md',
+    contextMode: 'none',
+    goal: 'Analyse the current git diff to understand scope, intent and constraints before implementing changes.',
+  },
   {
     id: 'spec',
     name: '📋 Refine Specification',
     enabled: true,
     model: 'claude-sonnet-4-6',
+    category: 'planning',
     skill: '.agentic-flow/skills/spec.md',
     contextMode: 'none',
     contextFiles: ['README.md', 'docs/**/*.md'],
@@ -47,6 +68,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     name: '🏛 Architecture Breakdown',
     enabled: true,
     model: 'claude-sonnet-4-6',
+    category: 'planning',
     skill: '.agentic-flow/skills/architecture.md',
     contextMode: 'summary',
     contextStepIds: ['spec'],
@@ -57,6 +79,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     name: '🗺 Development Plan',
     enabled: false,
     model: 'claude-sonnet-4-6',
+    category: 'planning',
     skill: '.agentic-flow/skills/implementation-plan.md',
     contextMode: 'summary',
     contextStepIds: ['spec', 'architecture'],
@@ -67,6 +90,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     name: '🧭 Formal Pre-Check',
     enabled: true,
     model: 'gpt-5.4',
+    category: 'review',
     skill: '.agentic-flow/skills/formal-precheck.md',
     contextMode: 'summary',
     contextStepIds: ['spec', 'architecture', 'implementation-plan'],
@@ -77,9 +101,10 @@ const DEFAULT_STEPS: StepConfig[] = [
     name: '🛠 Implement',
     enabled: true,
     model: 'claude-sonnet-4-6',
+    category: 'generation',
     skill: '.agentic-flow/skills/implement.md',
     contextMode: 'summary',
-    contextStepIds: ['spec', 'architecture', 'implementation-plan', 'formal-precheck'],
+    contextStepIds: ['diff-analysis', 'spec', 'architecture', 'implementation-plan', 'formal-precheck'],
     goal: 'Implement the planned changes in the workspace.',
   },
   {
@@ -87,6 +112,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     name: '🔍 Technical Review',
     enabled: true,
     model: 'gpt-5.4',
+    category: 'review',
     skill: '.agentic-flow/skills/arch-review.md',
     contextMode: 'summary',
     contextStepIds: ['spec', 'implementation-plan', 'formal-precheck', 'implement'],
@@ -97,6 +123,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     name: '🧯 Fix Findings',
     enabled: true,
     model: 'claude-sonnet-4-6',
+    category: 'generation',
     skill: '.agentic-flow/skills/fix.md',
     contextMode: 'summary',
     contextStepIds: ['review', 'test', 'security'],
@@ -108,6 +135,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     name: '🧪 Tests & Verification',
     enabled: false,
     model: 'claude-sonnet-4-6',
+    category: 'verification',
     skill: '.agentic-flow/skills/testing.md',
     contextMode: 'summary',
     contextStepIds: ['spec', 'implementation-plan', 'formal-precheck', 'implement', 'fix'],
@@ -118,6 +146,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     name: '🔒 Security Review',
     enabled: false,
     model: 'gpt-5.4',
+    category: 'review',
     skill: '.agentic-flow/skills/security.md',
     contextMode: 'summary',
     contextStepIds: ['spec', 'architecture', 'formal-precheck', 'implement', 'fix'],
@@ -128,6 +157,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     name: '📚 Documentation',
     enabled: false,
     model: 'gpt-5.4-mini',
+    category: 'reporting',
     skill: '.agentic-flow/skills/docs.md',
     contextMode: 'summary',
     contextStepIds: ['spec', 'implementation-plan', 'formal-precheck', 'implement', 'review', 'fix', 'test', 'security'],
@@ -138,6 +168,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     name: '💥 Runtime Hard Check',
     enabled: false,
     model: 'claude-sonnet-4-6',
+    category: 'verification',
     executor: 'hard-check',
     skill: '.agentic-flow/skills/hard-check.md',
     contextMode: 'summary',
@@ -155,6 +186,7 @@ const DEFAULT_STEPS: StepConfig[] = [
     name: '✅ Final Report',
     enabled: true,
     model: 'gpt-5.4-mini',
+    category: 'reporting',
     skill: '.agentic-flow/skills/done.md',
     contextMode: 'summary',
     goal: 'Summarize the session outcome, open risks and next actions.',
@@ -169,6 +201,16 @@ export const DEFAULT_CONFIG: AgenticFlowConfig = {
   sessionFile: path.join(DEFAULT_STORAGE_DIR, SESSION_BASENAME),
   summaryMaxTokens: 250,
   contextMaxTokens: 1400,
+  // Model router: maps step categories to model IDs.
+  // When a step has no explicit model set, the router picks the model for its category.
+  // Leave empty ({}) to keep per-step model assignments only.
+  modelRouter: {},
+  // Git context: captured once at run start and injected into every step prompt.
+  gitContext: {
+    enabled: true,
+    maxTokens: 500,
+    recentCommits: 5,
+  },
   runtime: {
     env: {},
     envFiles: [path.join(DEFAULT_STORAGE_DIR, RUNTIME_ENV_BASENAME)],
@@ -207,27 +249,69 @@ export function getRuntimeEnvPath(): string | undefined {
 
 export function loadConfig(): AgenticFlowConfig {
   const p = configPath();
-  if (!p || !fs.existsSync(p)) return structuredClone(DEFAULT_CONFIG);
+  const vscodeOverrides = readVsCodeConfigOverrides();
+  if (!p || !fs.existsSync(p)) {
+    return mergeConfigSources(undefined, vscodeOverrides);
+  }
   try {
     const raw = fs.readFileSync(p, 'utf8');
     const parsed = JSON.parse(raw) as Partial<AgenticFlowConfig>;
-    return {
-      ...DEFAULT_CONFIG,
-      ...parsed,
-      runProfile: normalizeRunProfile(parsed.runProfile),
-      steps: mergeSteps(parsed.steps),
-      runtime: {
-        ...DEFAULT_CONFIG.runtime,
-        ...parsed.runtime,
-        envFiles: parsed.runtime?.envFiles ?? [],
-        customClis: parsed.runtime?.customClis ?? [],
-        customModels: parsed.runtime?.customModels ?? [],
-      },
-    };
+    return mergeConfigSources(parsed, vscodeOverrides);
   } catch (e) {
     vscode.window.showWarningMessage(`[Agentic Flow] Could not parse config: ${e}. Using defaults.`);
-    return structuredClone(DEFAULT_CONFIG);
+    return mergeConfigSources(undefined, vscodeOverrides);
   }
+}
+
+function mergeConfigSources(
+  fileConfig?: Partial<AgenticFlowConfig>,
+  vscodeOverrides: Partial<AgenticFlowConfig> = {},
+): AgenticFlowConfig {
+  return {
+    ...DEFAULT_CONFIG,
+    ...fileConfig,
+    ...vscodeOverrides,
+    runProfile: normalizeRunProfile(vscodeOverrides.runProfile ?? fileConfig?.runProfile),
+    steps: mergeSteps(vscodeOverrides.steps ?? fileConfig?.steps),
+    modelRouter: {
+      ...DEFAULT_CONFIG.modelRouter,
+      ...fileConfig?.modelRouter,
+      ...vscodeOverrides.modelRouter,
+    },
+    gitContext: {
+      ...DEFAULT_CONFIG.gitContext,
+      ...fileConfig?.gitContext,
+      ...vscodeOverrides.gitContext,
+    },
+    runtime: {
+      ...DEFAULT_CONFIG.runtime,
+      ...fileConfig?.runtime,
+      ...vscodeOverrides.runtime,
+      envFiles: vscodeOverrides.runtime?.envFiles ?? fileConfig?.runtime?.envFiles ?? [],
+      customClis: vscodeOverrides.runtime?.customClis ?? fileConfig?.runtime?.customClis ?? [],
+      customModels: vscodeOverrides.runtime?.customModels ?? fileConfig?.runtime?.customModels ?? [],
+      env: {
+        ...DEFAULT_CONFIG.runtime?.env,
+        ...fileConfig?.runtime?.env,
+        ...vscodeOverrides.runtime?.env,
+      },
+    },
+  };
+}
+
+function readVsCodeConfigOverrides(): Partial<AgenticFlowConfig> {
+  const cfg = vscode.workspace.getConfiguration('agenticFlow');
+
+  return {
+    runProfile: cfg.get<RunProfileId>('runProfile'),
+    defaultModel: cfg.get<string>('defaultModel'),
+    summaryMaxTokens: cfg.get<number>('summaryMaxTokens'),
+    contextMaxTokens: cfg.get<number>('contextMaxTokens'),
+    steps: cfg.get<StepConfig[]>('steps'),
+    modelRouter: cfg.get<ModelRouter>('modelRouter'),
+    gitContext: cfg.get<GitContextConfig>('gitContext'),
+    runtime: cfg.get<RuntimeConfig>('runtime'),
+  };
 }
 
 function mergeSteps(parsedSteps?: StepConfig[]): StepConfig[] {
@@ -255,7 +339,8 @@ function mergeSteps(parsedSteps?: StepConfig[]): StepConfig[] {
 }
 
 export function normalizeRunProfile(profile?: string): RunProfileId {
-  return profile === 'lite' || profile === 'standard' || profile === 'full' || profile === 'custom'
+  return profile === 'lite' || profile === 'standard' || profile === 'full' ||
+    profile === 'evolutive' || profile === 'hotfix' || profile === 'custom'
     ? profile
     : 'standard';
 }

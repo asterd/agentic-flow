@@ -8,7 +8,8 @@ export type RunMode = 'new' | 'continue';
 export type StepRunCondition = 'always' | 'ifIssues';
 export type StepResultStatus = 'ok' | 'issues' | 'blocked';
 export type StepExecutor = 'model' | 'hard-check';
-export type RunProfileId = 'lite' | 'standard' | 'full' | 'custom';
+export type RunProfileId = 'lite' | 'standard' | 'full' | 'evolutive' | 'hotfix' | 'custom';
+export type StepCategory = 'planning' | 'generation' | 'review' | 'verification' | 'reporting';
 export type ModelSource = 'cli' | 'api' | 'vscode';
 export type TokenAccounting = 'estimated' | 'reported';
 export type ApiProviderId = 'openai' | 'anthropic' | 'xai' | 'openrouter' | 'ollama';
@@ -84,6 +85,8 @@ export interface StepConfig {
   runCondition?: StepRunCondition;
   goal?: string;
   hardCheck?: HardCheckConfig;
+  /** Optional category used by the model router when no explicit model is set for this step. */
+  category?: StepCategory;
   meta?: Record<string, unknown>;
 }
 
@@ -102,6 +105,21 @@ export interface HardCheckConfig {
   env?: Record<string, string>;
 }
 
+/**
+ * Maps step categories to model IDs used when a step has no explicit model set.
+ * Example: { "planning": "claude-opus-4-6", "generation": "claude-sonnet-4-6", "review": "gpt-5.4" }
+ */
+export type ModelRouter = Partial<Record<StepCategory, string>>;
+
+export interface GitContextConfig {
+  /** Whether to capture git context before each run. Defaults to true when a git repo is detected. */
+  enabled?: boolean;
+  /** Max tokens to budget for the git diff section. Defaults to 500. */
+  maxTokens?: number;
+  /** Number of recent commits to include in context. Defaults to 5. */
+  recentCommits?: number;
+}
+
 export interface AgenticFlowConfig {
   version: string;
   runProfile?: RunProfileId;
@@ -111,6 +129,10 @@ export interface AgenticFlowConfig {
   summaryMaxTokens?: number;
   contextMaxTokens?: number;
   defaultModel?: string;
+  /** Per-category model routing. Applied when a step has no explicit model set. */
+  modelRouter?: ModelRouter;
+  /** Git context injection settings. */
+  gitContext?: GitContextConfig;
   runtime?: RuntimeConfig;
 }
 
@@ -205,6 +227,8 @@ export interface WorkflowRunState {
   finished: boolean;
   cancelled: boolean;
   title?: string;
+  /** Git context captured once at run start. Undefined when workspace has no git repo. */
+  gitContext?: GitContextSnapshot;
 }
 
 export interface SessionRequirement {
@@ -252,14 +276,18 @@ export interface SessionState {
   requirements: SessionRequirement[];
   latestRun?: RunHistoryEntry;
   runs: RunHistoryEntry[];
+  microActions?: MicroActionEntry[];
 }
 
 export type ExtToWebMsg =
-  | { type: 'init'; models: ModelInfo[]; config: AgenticFlowConfig; session: SessionState | null }
+  | { type: 'init'; models: ModelInfo[]; config: AgenticFlowConfig; session: SessionState | null; language?: string }
   | { type: 'runState'; state: WorkflowRunState }
   | { type: 'stepLog'; stepId: string; chunk: string }
   | { type: 'configSaved' }
   | { type: 'sessionUpdated'; session: SessionState | null }
+  | { type: 'microActionChunk'; chunk: string }
+  | { type: 'microActionDone'; entry: MicroActionEntry }
+  | { type: 'microActionError'; message: string }
   | { type: 'error'; message: string };
 
 export interface StepOverride {
@@ -269,9 +297,35 @@ export interface StepOverride {
   skill?: string;
 }
 
+export interface MicroActionEntry {
+  id: string;
+  prompt: string;
+  modelId: string;
+  modelLabel: string;
+  output: string;
+  createdAt: number;
+  durationMs: number;
+  tokensUsed?: number;
+  tokenUsage?: TokenUsage;
+}
+
+/** Snapshot of git state captured once at run start. Undefined when no git repo is detected. */
+export interface GitContextSnapshot {
+  isRepo: boolean;
+  branch?: string;
+  status?: string;       // git status --porcelain output
+  stagedDiff?: string;   // git diff --cached
+  unstagedDiff?: string; // git diff
+  recentLog?: string;    // git log --oneline -N
+}
+
 export type WebToExtMsg =
   | { type: 'startRun'; task: string; mode: RunMode; stepOverrides?: StepOverride[] }
   | { type: 'cancelRun' }
+  | { type: 'rerunStep'; stepId: string }
+  | { type: 'runMicroAction'; prompt: string; modelId: string; includeContext: boolean }
+  | { type: 'cancelMicroAction' }
+  | { type: 'openDocs' }
   | { type: 'saveConfig'; config: AgenticFlowConfig }
   | { type: 'refreshModels' }
   | { type: 'openSettingsUi' }

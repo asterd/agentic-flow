@@ -7,12 +7,14 @@ import * as vscode from 'vscode';
 import { loadConfig } from './configManager';
 import { getConfiguredApiProviders, providerDefaultModels, providerRequiresApiKey } from './providerConfig';
 import type {
+  AgenticFlowConfig,
   CliInfo,
   CustomCliConfig,
   CustomModelConfig,
   ModelInfo,
   ModelPricing,
   ResolvedApiProviderSettings,
+  StepConfig,
 } from './types';
 
 const execFileAsync = promisify(execFile);
@@ -138,6 +140,42 @@ export function resolveModelSelection(selection: string, models: ModelInfo[]): M
   if (!byName.length) return undefined;
 
   return byName.sort((left, right) => sourcePriority(left.source) - sourcePriority(right.source))[0];
+}
+
+/**
+ * Resolve the model for a step using the priority chain:
+ * 1. Step's explicit `model` field
+ * 2. Model router entry for the step's `category`
+ * 3. `config.defaultModel`
+ *
+ * Falls back to undefined only when nothing resolves.
+ */
+export function resolveModelForStep(
+  step: StepConfig,
+  config: AgenticFlowConfig,
+  models: ModelInfo[],
+): ModelInfo | undefined {
+  // 1. Explicit step model
+  if (step.model) {
+    const m = resolveModelSelection(step.model, models);
+    if (m) return m;
+  }
+
+  // 2. Category-based router
+  if (step.category && config.modelRouter) {
+    const routedId = config.modelRouter[step.category];
+    if (routedId) {
+      const m = resolveModelSelection(routedId, models);
+      if (m) return m;
+    }
+  }
+
+  // 3. Global default model
+  if (config.defaultModel) {
+    return resolveModelSelection(config.defaultModel, models);
+  }
+
+  return undefined;
 }
 
 function sourcePriority(source: ModelInfo['source']): number {

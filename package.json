@@ -90,6 +90,14 @@
       {
         "command": "agenticFlow.clearProviderApiKey",
         "title": "Agentic Flow: Clear Provider API Key"
+      },
+      {
+        "command": "agenticFlow.openDocs",
+        "title": "Agentic Flow: Open Documentation"
+      },
+      {
+        "command": "agenticFlow.generateRepoMd",
+        "title": "Agentic Flow: Generate REPO.md"
       }
     ],
     "menus": {
@@ -120,6 +128,12 @@
         },
         {
           "command": "agenticFlow.clearProviderApiKey"
+        },
+        {
+          "command": "agenticFlow.openDocs"
+        },
+        {
+          "command": "agenticFlow.generateRepoMd"
         }
       ]
     },
@@ -316,6 +330,267 @@
                   },
                   "default": []
                 }
+              }
+            }
+          }
+        },
+        "agenticFlow.runProfile": {
+          "type": "string",
+          "enum": [
+            "lite",
+            "standard",
+            "full",
+            "evolutive",
+            "hotfix",
+            "custom"
+          ],
+          "default": "standard",
+          "scope": "resource",
+          "description": "Default run profile for this workspace."
+        },
+        "agenticFlow.defaultModel": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "Fallback model used when a step has no explicit model and no model-router match."
+        },
+        "agenticFlow.summaryMaxTokens": {
+          "type": "number",
+          "default": 250,
+          "minimum": 50,
+          "scope": "resource",
+          "description": "Token budget for compact per-step summaries injected into downstream steps."
+        },
+        "agenticFlow.contextMaxTokens": {
+          "type": "number",
+          "default": 1400,
+          "minimum": 100,
+          "scope": "resource",
+          "description": "Total token budget for previous-step context injected into each step."
+        },
+        "agenticFlow.modelRouter": {
+          "type": "object",
+          "scope": "resource",
+          "default": {},
+          "description": "Map step categories to model IDs. Used when a step has no explicit model.",
+          "additionalProperties": false,
+          "properties": {
+            "planning": {
+              "type": "string",
+              "default": ""
+            },
+            "generation": {
+              "type": "string",
+              "default": ""
+            },
+            "review": {
+              "type": "string",
+              "default": ""
+            },
+            "verification": {
+              "type": "string",
+              "default": ""
+            },
+            "reporting": {
+              "type": "string",
+              "default": ""
+            }
+          }
+        },
+        "agenticFlow.gitContext": {
+          "type": "object",
+          "scope": "resource",
+          "default": {
+            "enabled": true,
+            "maxTokens": 500,
+            "recentCommits": 5
+          },
+          "description": "Git diff/log context injected into step prompts.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "maxTokens": {
+              "type": "number",
+              "default": 500,
+              "minimum": 100
+            },
+            "recentCommits": {
+              "type": "number",
+              "default": 5,
+              "minimum": 1,
+              "maximum": 20
+            }
+          }
+        },
+        "agenticFlow.runtime": {
+          "type": "object",
+          "scope": "resource",
+          "default": {
+            "env": {},
+            "envFiles": [
+              ".agentic-flow/runtime.env"
+            ],
+            "customClis": [],
+            "customModels": []
+          },
+          "description": "Runtime environment files, inline env vars, custom CLIs and custom models.",
+          "additionalProperties": false,
+          "properties": {
+            "env": {
+              "type": "object",
+              "default": {},
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "envFiles": {
+              "type": "array",
+              "default": [
+                ".agentic-flow/runtime.env"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "customClis": {
+              "type": "array",
+              "default": [],
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "customModels": {
+              "type": "array",
+              "default": [],
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "cliId": {
+                    "type": "string"
+                  },
+                  "modelName": {
+                    "type": "string"
+                  },
+                  "contextWindow": {
+                    "type": "number"
+                  },
+                  "launchArgs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": []
+                  },
+                  "env": {
+                    "type": "object",
+                    "default": {},
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "agenticFlow.steps": {
+          "type": "array",
+          "scope": "resource",
+          "default": [],
+          "description": "Advanced: override the default pipeline steps for this workspace.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "model": {
+                "type": "string"
+              },
+              "executor": {
+                "type": "string",
+                "enum": [
+                  "model",
+                  "hard-check"
+                ]
+              },
+              "cli": {
+                "type": "string"
+              },
+              "skill": {
+                "type": "string"
+              },
+              "contextMode": {
+                "type": "string",
+                "enum": [
+                  "summary",
+                  "full",
+                  "none"
+                ]
+              },
+              "contextStepIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contextFiles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "runCondition": {
+                "type": "string",
+                "enum": [
+                  "always",
+                  "ifIssues"
+                ]
+              },
+              "goal": {
+                "type": "string"
+              },
+              "category": {
+                "type": "string",
+                "enum": [
+                  "planning",
+                  "generation",
+                  "review",
+                  "verification",
+                  "reporting"
+                ]
               }
             }
           }

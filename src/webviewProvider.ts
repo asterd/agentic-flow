@@ -4,9 +4,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { AgenticFlowConfig, CliInfo, ExtToWebMsg, ModelInfo, WebToExtMsg } from './types';
-import { RUN_PROFILE_PRESETS, ensureWorkspaceFile, loadConfig, loadSessionState, resetLocalSettings, saveConfig } from './configManager';
+import type { AgenticFlowConfig, CliInfo, ExtToWebMsg, MicroActionEntry, ModelInfo, WebToExtMsg } from './types';
+import { RUN_PROFILE_PRESETS, ensureWorkspaceFile, getAgenticFlowDir, loadConfig, loadSessionState, resetLocalSettings, saveConfig, saveSessionState } from './configManager';
 import { WorkflowEngine } from './workflowEngine';
+import { resolveCliForModel, resolveModelSelection } from './cliDetector';
+import { runStep } from './stepRunner';
+import { getRepoMdPath } from './repoSummaryWriter';
+import { randomUUID } from 'crypto';
 
 // ── Sidebar WebviewView Provider (activity bar) ───────────────
 export class AgenticFlowSidebarProvider implements vscode.WebviewViewProvider {
@@ -15,6 +19,7 @@ export class AgenticFlowSidebarProvider implements vscode.WebviewViewProvider {
   private _engine: WorkflowEngine | undefined;
   private _models: ModelInfo[] = [];
   private _clis: CliInfo[] = [];
+  private _microActionCancel: vscode.CancellationTokenSource | null = null;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
@@ -75,7 +80,7 @@ export class AgenticFlowSidebarProvider implements vscode.WebviewViewProvider {
   private _sendInit() {
     const config = loadConfig();
     const session = this._engine?.currentSession ?? loadSessionState();
-    this._post({ type: 'init', models: this._models, config, session });
+    this._post({ type: 'init', models: this._models, config, session, language: vscode.env.language });
     if (this._engine?.currentState) {
       this._post({ type: 'runState', state: this._engine.currentState });
     }
@@ -108,6 +113,87 @@ export class AgenticFlowSidebarProvider implements vscode.WebviewViewProvider {
         break;
       case 'cancelRun':
         this._engine?.cancel();
+        break;
+      case 'rerunStep':
+        if (!root) { this._post({ type: 'error', message: 'Open a workspace folder first.' }); return; }
+        if (!this._engine) { this._post({ type: 'error', message: 'Engine not initialised.' }); return; }
+        if (this._engine.isRunning) { this._post({ type: 'error', message: 'A run is already in progress.' }); return; }
+        this._engine.rerunStep(msg.stepId, loadConfig()).catch(err => {
+          this._post({ type: 'error', message: String(err.message ?? err) });
+        });
+        break;
+      case 'runMicroAction': {
+        if (!root) { this._post({ type: 'microActionError', message: 'Open a workspace folder first.' }); return; }
+        if (this._engine?.isRunning) { this._post({ type: 'microActionError', message: 'Stop the active pipeline run first.' }); return; }
+        if (this._microActionCancel) { this._post({ type: 'microActionError', message: 'A micro-action is already running.' }); return; }
+
+        const maModel = resolveModelSelection(msg.modelId, this._models);
+        if (!maModel) { this._post({ type: 'microActionError', message: `Model "${msg.modelId}" not found.` }); return; }
+        const maCli = resolveCliForModel(maModel, this._clis);
+
+        let maPrompt = msg.prompt.trim();
+        if (msg.includeContext) {
+          const session = loadSessionState();
+          const afDir = getAgenticFlowDir();
+          const repoPath = afDir ? getRepoMdPath(afDir) : null;
+          const repoContent = repoPath && fs.existsSync(repoPath)
+            ? fs.readFileSync(repoPath, 'utf8').slice(0, 8000)
+            : null;
+          const sessionSummary = session
+            ? `Session: ${session.title} | Iteration: ${session.iteration} | Last objective: ${session.currentObjective}`
+            : null;
+          const ctx: string[] = [];
+          if (repoContent) ctx.push(`# PROJECT CONTEXT (REPO.md)\n\n${repoContent}`);
+          if (sessionSummary) ctx.push(`# SESSION CONTEXT\n\n${sessionSummary}`);
+          if (ctx.length) maPrompt = ctx.join('\n\n---\n\n') + '\n\n---\n\n# INSTRUCTION\n\n' + maPrompt;
+        }
+
+        this._microActionCancel = new vscode.CancellationTokenSource();
+        const maStart = Date.now();
+        const maConfig = loadConfig();
+
+        runStep({
+          cli: maCli,
+          model: maModel,
+          prompt: maPrompt,
+          workspaceRoot: root,
+          onChunk: chunk => this._post({ type: 'microActionChunk', chunk }),
+          cancellationToken: this._microActionCancel.token,
+          env: (await import('./configManager')).resolveRuntimeEnv(maConfig),
+        }).then(result => {
+          const entry: MicroActionEntry = {
+            id: randomUUID(),
+            prompt: msg.prompt,
+            modelId: maModel.id,
+            modelLabel: maModel.label,
+            output: result.output,
+            createdAt: maStart,
+            durationMs: result.durationMs,
+            tokensUsed: result.tokenUsage?.totalTokens,
+            tokenUsage: result.tokenUsage,
+          };
+          // Persist to session
+          const session = loadSessionState();
+          if (session) {
+            session.microActions = [...(session.microActions ?? []), entry].slice(-50);
+            saveSessionState(session);
+          }
+          this._post({ type: 'microActionDone', entry });
+        }).catch(err => {
+          if (String(err.message ?? err) !== 'Cancelled') {
+            this._post({ type: 'microActionError', message: String(err.message ?? err) });
+          }
+        }).finally(() => {
+          this._microActionCancel?.dispose();
+          this._microActionCancel = null;
+        });
+        break;
+      }
+      case 'cancelMicroAction':
+        this._microActionCancel?.cancel();
+        break;
+      case 'openDocs':
+        vscode.commands.executeCommand('agenticFlow.openDocs');
         break;
       case 'saveConfig':
         try {
@@ -263,7 +349,7 @@ export class AgenticFlowPanel {
   private _sendInit() {
     this._config = loadConfig();
     const session = this._engine.currentSession ?? loadSessionState();
-    this._post({ type: 'init', models: this._models, config: this._config, session });
+    this._post({ type: 'init', models: this._models, config: this._config, session, language: vscode.env.language });
     if (this._engine.currentState) {
       this._post({ type: 'runState', state: this._engine.currentState });
     }
@@ -286,6 +372,19 @@ export class AgenticFlowPanel {
         break;
       case 'cancelRun':
         this._engine.cancel();
+        break;
+      case 'openDocs':
+        vscode.commands.executeCommand('agenticFlow.openDocs');
+        break;
+      case 'rerunStep':
+        if (this._engine.isRunning) {
+          this._post({ type: 'error', message: 'A run is already in progress.' });
+          return;
+        }
+        this._config = loadConfig();
+        this._engine.rerunStep(msg.stepId, this._config).catch(err => {
+          this._post({ type: 'error', message: String(err.message ?? err) });
+        });
         break;
       case 'saveConfig':
         try {
@@ -386,10 +485,12 @@ function getWebviewHtml(
       <svg class="header-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M9 1.5L3 9h5l-1 5.5L13 7H8L9 1.5Z" fill="currentColor"/>
       </svg>
-      <span class="header-title">Agentic Flow</span>
+      <span class="header-title" data-i18n="appTitle">Agentic Flow</span>
     </div>
     <div class="header-actions">
-      <button class="icon-btn" id="btnNewSession" title="New session (clears history)">
+      <button class="icon-btn" id="btnOpenDocs" data-i18n="btnDocs" data-i18n-attr="title" title="Help &amp; Documentation">?</button>
+      <button class="icon-btn" id="btnMicroAction" data-i18n="btnQuickAction" data-i18n-attr="title" title="Quick Action — run a single instruction on any model">⚡</button>
+      <button class="icon-btn" id="btnNewSession" data-i18n="btnNewSession" data-i18n-attr="title" title="New session (clears history)">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8Z"/></svg>
       </button>
       <button class="icon-btn" id="btnTogglePipelineConfig" title="Configure pipeline steps">
@@ -407,15 +508,15 @@ function getWebviewHtml(
   <!-- Session config overlay (slides from right, session-local) -->
   <div class="settings-overlay" id="sessionConfig">
     <div class="settings-header">
-      <span class="settings-header-title">Run Configuration</span>
+      <span class="settings-header-title" data-i18n="runConfigTitle">Run Configuration</span>
       <button class="icon-btn" id="btnCloseSessionConfig" title="Close">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg>
       </button>
     </div>
     <div class="settings-body" id="scBody"></div>
     <div class="settings-footer" style="display:flex;gap:6px">
-      <button class="btn-primary-full" id="btnApplySessionConfig">Apply &amp; Close</button>
-      <button class="btn-ghost" id="btnResetSessionConfig" style="white-space:nowrap;flex-shrink:0">Reset</button>
+      <button class="btn-primary-full" id="btnApplySessionConfig" data-i18n="applyClose">Apply &amp; Close</button>
+      <button class="btn-ghost" id="btnResetSessionConfig" style="white-space:nowrap;flex-shrink:0" data-i18n="reset">Reset</button>
     </div>
   </div>
 
@@ -427,7 +528,7 @@ function getWebviewHtml(
   </div>
 
   <!-- No-models warning -->
-  <div class="no-models-bar" id="noModelsBar">
+  <div class="no-models-bar" id="noModelsBar" data-i18n="noModels">
     No models detected. Install a local CLI or configure API providers in VS Code Settings, then click ↺.
   </div>
 
@@ -435,8 +536,8 @@ function getWebviewHtml(
   <div class="chat" id="chat">
     <div class="welcome" id="welcome">
       <div class="welcome-icon">⚡</div>
-      <div class="welcome-title">Agentic Flow</div>
-      <div class="welcome-desc">Orchestrate AI agents through your full development pipeline. Describe a task below to start.</div>
+      <div class="welcome-title" data-i18n="welcomeTitle">Agentic Flow</div>
+      <div class="welcome-desc" data-i18n="welcomeDesc">Orchestrate AI agents through your full development pipeline. Describe a task below to start.</div>
     </div>
   </div>
 
@@ -452,19 +553,50 @@ function getWebviewHtml(
       <div class="input-footer">
         <span class="input-hint" id="inputHint"></span>
         <div class="input-btns">
-          <span class="input-key-hint">⌘↵ run</span>
-          <button class="btn-stop" id="btnCancel" disabled>■ Stop</button>
-          <button class="btn-sec" id="btnContinue" disabled>Continue</button>
-          <button class="btn-run" id="btnStart">Run</button>
+          <span class="input-key-hint" data-i18n="runShortcut">⌘↵ run</span>
+          <button class="btn-stop" id="btnCancel" disabled data-i18n="btnStop">■ Stop</button>
+          <button class="btn-sec" id="btnContinue" disabled data-i18n="btnContinue">Continue</button>
+          <button class="btn-run" id="btnStart" data-i18n="btnRun">Run</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Micro-action overlay -->
+  <div class="settings-overlay" id="microActionOverlay">
+    <div class="settings-header">
+      <span class="settings-header-title" data-i18n="quickActionTitle">⚡ Quick Action</span>
+      <button class="icon-btn" id="btnCloseMicroAction" title="Close">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg>
+      </button>
+    </div>
+    <div class="settings-body" style="gap:10px">
+      <div style="font-size:11px;color:var(--muted)" data-i18n="quickActionDesc">Run a single instruction on any model. No pipeline — direct output only.</div>
+      <label class="cfg-field"><span data-i18n="maModel">Model</span>
+        <select id="maModelSelect"></select>
+      </label>
+      <label class="cfg-field" style="flex-direction:row;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="maIncludeContext" checked/>
+        <span style="font-size:12px" data-i18n="maIncludeContext">Include session context (REPO.md + last run summary)</span>
+      </label>
+      <label class="cfg-field"><span data-i18n="maInstruction">Instruction</span>
+        <textarea id="maPrompt" rows="5" style="resize:vertical;min-height:80px"></textarea>
+      </label>
+      <div id="maResultWrap" style="display:none">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px" id="maResultMeta"></div>
+        <pre class="step-log" id="maResult" style="max-height:260px;overflow-y:auto;white-space:pre-wrap;word-break:break-word"></pre>
+      </div>
+    </div>
+    <div class="settings-footer" style="display:flex;gap:6px">
+      <button class="btn-primary-full" id="btnRunMicroAction" data-i18n="maRun">⚡ Run</button>
+      <button class="btn-stop" id="btnCancelMicroAction" disabled style="white-space:nowrap;flex-shrink:0" data-i18n="maStop">■ Stop</button>
     </div>
   </div>
 
   <!-- Settings overlay -->
   <div class="settings-overlay" id="settingsOverlay">
     <div class="settings-header">
-      <span class="settings-header-title">Workspace Configuration</span>
+      <span class="settings-header-title" data-i18n="workspaceConfigTitle">Workspace Configuration</span>
       <button class="icon-btn" id="btnCloseSettings" title="Close">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/></svg>
       </button>
@@ -477,17 +609,27 @@ function getWebviewHtml(
         <button class="btn-ghost" id="btnOpenSettingsUi" style="margin-bottom:10px">Open VS Code Settings</button>
       </div>
       <div class="settings-section">
-        <div class="settings-section-title">Pipeline steps</div>
+        <div class="settings-section-title" data-i18n="pipelineSteps">Pipeline steps</div>
         <div id="stepsConfig"></div>
       </div>
       <div class="settings-section">
-        <div class="settings-section-title">Runtime</div>
+        <div class="settings-section-title" data-i18n="modelRouter">Model Router</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px" data-i18n="modelRouterHint">Assign models to step categories. Applied when a step has no explicit model set. Leave blank to use per-step models only.</div>
+        <div id="modelRouterConfig"></div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title" data-i18n="gitContext">Git Context</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px" data-i18n="gitContextHint">Inject the current git diff into every step prompt. Automatically disabled when the workspace has no git repo.</div>
+        <div id="gitContextConfig"></div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title" data-i18n="runtime">Runtime</div>
         <div class="runtime-section" id="runtimeConfig"></div>
       </div>
     </div>
     <div class="settings-footer" style="display:flex;gap:6px">
-      <button class="btn-primary-full" id="btnSaveConfig">Save configuration</button>
-      <button class="btn-ghost" id="btnResetLocalSettings" style="white-space:nowrap;flex-shrink:0">Reset local settings</button>
+      <button class="btn-primary-full" id="btnSaveConfig" data-i18n="saveConfig">Save configuration</button>
+      <button class="btn-ghost" id="btnResetLocalSettings" style="white-space:nowrap;flex-shrink:0" data-i18n="resetLocalSettings">Reset local settings</button>
     </div>
   </div>
 
@@ -500,12 +642,160 @@ let sessionOverrides = {}; // { [stepId]: { enabled, model, skill } }
 let sessionRunProfile = 'custom';
 const stepLogs = {};
 
+// ── i18n ──────────────────────────────────────────────────────
+const LANGS = {
+  en: {
+    appTitle: 'Agentic Flow',
+    btnNewSession: 'New session (clears history)',
+    btnPipelineConfig: 'Configure pipeline steps',
+    btnRefreshModels: 'Refresh models & CLIs',
+    btnOpenSettings: 'Open VS Code settings',
+    btnDocs: 'Help & Documentation',
+    btnQuickAction: 'Quick Action — run a single instruction on any model',
+    runConfigTitle: 'Run Configuration',
+    runConfigHint: 'Applies to the next run only — does not change global config',
+    runProfileLabel: 'Run profile for next execution',
+    applyPreset: 'Apply preset to this run',
+    applyClose: 'Apply & Close',
+    reset: 'Reset',
+    workspaceConfigTitle: 'Workspace Configuration',
+    workspaceConfigHint: 'Persistent configuration now lives in the standard VS Code settings UI and in the workspace files under',
+    openVsCodeSettings: 'Open VS Code Settings',
+    pipelineSteps: 'Pipeline steps',
+    modelRouter: 'Model Router',
+    modelRouterHint: 'Assign models to step categories. Applied when a step has no explicit model set. Leave blank to use per-step models only.',
+    gitContext: 'Git Context',
+    gitContextHint: 'Inject the current git diff into every step prompt. Automatically disabled when the workspace has no git repo.',
+    gitContextEnabled: 'Enable git context injection',
+    gitContextMaxTokens: 'Max tokens for diff',
+    gitContextCommits: 'Recent commits to include',
+    runtime: 'Runtime',
+    envFilesLabel: 'Env files (one per line)',
+    envVarsLabel: 'Environment variables',
+    addVariable: '+ Add variable',
+    runProfile: 'Run profile',
+    saveConfig: 'Save configuration',
+    resetLocalSettings: 'Reset local settings',
+    welcomeTitle: 'Agentic Flow',
+    welcomeDesc: 'Orchestrate AI agents through your full development pipeline. Describe a task below to start.',
+    noModels: 'No models detected. Install a local CLI or configure API providers in VS Code Settings, then click ↺.',
+    noModelsHint: 'No models — install a CLI or add provider API keys in VS Code settings, then refresh',
+    taskPlaceholder: 'Describe what to build or change…',
+    runShortcut: '⌘↵ run',
+    btnStop: '■ Stop',
+    btnContinue: 'Continue',
+    btnRun: 'Run',
+    runCompleted: (done, meta) => \`✓ All \${done} step\${done !== 1 ? 's' : ''} completed successfully.\${meta}\`,
+    runErrors: (errors, done, meta) => \`Completed with \${errors} error\${errors > 1 ? 's' : ''}. \${done} step\${done !== 1 ? 's' : ''} succeeded.\${meta}\`,
+    runCancelled: meta => \`Run cancelled.\${meta}\`,
+    customProfileDesc: 'Custom keeps the current per-run step overrides as-is.',
+    customProfileDescSettings: 'Custom keeps the current enabled/disabled step toggles as-is.',
+    // Micro-action overlay
+    quickActionTitle: '⚡ Quick Action',
+    quickActionDesc: 'Run a single instruction on any model. No pipeline — direct output only.',
+    maModel: 'Model',
+    maIncludeContext: 'Include session context (REPO.md + last run summary)',
+    maInstruction: 'Instruction',
+    maPlaceholder: 'Type a quick instruction or question…',
+    maRun: '⚡ Run',
+    maStop: '■ Stop',
+    maRunning: 'Running…',
+    maDone: (tokens, dur, label) => \`✓ Done · \${tokens}\${dur} · \${label}\`,
+    maWarning: msg => \`⚠ \${msg}\`,
+  },
+  it: {
+    appTitle: 'Agentic Flow',
+    btnNewSession: 'Nuova sessione (cancella la cronologia)',
+    btnPipelineConfig: 'Configura gli step della pipeline',
+    btnRefreshModels: 'Aggiorna modelli e CLI',
+    btnOpenSettings: 'Apri impostazioni VS Code',
+    btnDocs: 'Aiuto e Documentazione',
+    btnQuickAction: "Azione rapida — esegui un'istruzione singola su qualsiasi modello",
+    runConfigTitle: 'Configurazione Run',
+    runConfigHint: 'Applicato solo al prossimo run — non modifica la configurazione globale',
+    runProfileLabel: 'Profilo di run per la prossima esecuzione',
+    applyPreset: 'Applica preset a questo run',
+    applyClose: 'Applica e Chiudi',
+    reset: 'Ripristina',
+    workspaceConfigTitle: 'Configurazione Workspace',
+    workspaceConfigHint: 'La configurazione persistente si trova nelle impostazioni standard di VS Code e nei file workspace in',
+    openVsCodeSettings: 'Apri Impostazioni VS Code',
+    pipelineSteps: 'Step della pipeline',
+    modelRouter: 'Router Modelli',
+    modelRouterHint: 'Assegna modelli alle categorie di step. Applicato quando uno step non ha un modello esplicito. Lascia vuoto per usare solo i modelli per step.',
+    gitContext: 'Contesto Git',
+    gitContextHint: 'Inietta il diff git corrente in ogni prompt di step. Disabilitato automaticamente quando il workspace non ha un repo git.',
+    gitContextEnabled: 'Abilita iniezione contesto git',
+    gitContextMaxTokens: 'Token massimi per il diff',
+    gitContextCommits: 'Commit recenti da includere',
+    runtime: 'Runtime',
+    envFilesLabel: 'File env (uno per riga)',
+    envVarsLabel: "Variabili d'ambiente",
+    addVariable: '+ Aggiungi variabile',
+    runProfile: 'Profilo di run',
+    saveConfig: 'Salva configurazione',
+    resetLocalSettings: 'Ripristina impostazioni locali',
+    welcomeTitle: 'Agentic Flow',
+    welcomeDesc: 'Orchestra agenti AI attraverso la tua pipeline di sviluppo completa. Descrivi un compito qui sotto per iniziare.',
+    noModels: 'Nessun modello rilevato. Installa una CLI locale o configura i provider API nelle Impostazioni VS Code, poi clicca ↺.',
+    noModelsHint: 'Nessun modello — installa una CLI o aggiungi chiavi API provider nelle impostazioni VS Code, poi aggiorna',
+    taskPlaceholder: 'Descrivi cosa costruire o modificare…',
+    runShortcut: '⌘↵ avvia',
+    btnStop: '■ Ferma',
+    btnContinue: 'Continua',
+    btnRun: 'Avvia',
+    runCompleted: (done, meta) => \`✓ Tutti i \${done} step completati con successo.\${meta}\`,
+    runErrors: (errors, done, meta) => \`Completato con \${errors} errore\${errors > 1 ? 'i' : ''}. \${done} step riusciti.\${meta}\`,
+    runCancelled: meta => \`Run annullato.\${meta}\`,
+    customProfileDesc: 'Custom mantiene le sovrascritture di step per run correnti così come sono.',
+    customProfileDescSettings: 'Custom mantiene i toggle di step abilitati/disabilitati correnti così come sono.',
+    // Micro-action overlay
+    quickActionTitle: '⚡ Azione Rapida',
+    quickActionDesc: "Esegui un'istruzione singola su qualsiasi modello. Nessuna pipeline — output diretto.",
+    maModel: 'Modello',
+    maIncludeContext: 'Includi contesto sessione (REPO.md + ultimo run)',
+    maInstruction: 'Istruzione',
+    maPlaceholder: "Digita un'istruzione rapida o una domanda…",
+    maRun: '⚡ Avvia',
+    maStop: '■ Ferma',
+    maRunning: 'In esecuzione…',
+    maDone: (tokens, dur, label) => \`✓ Completato · \${tokens}\${dur} · \${label}\`,
+    maWarning: msg => \`⚠ \${msg}\`,
+  },
+};
+let _lang = 'en';
+function _resolveVscodeLang(vsLang) {
+  if (!vsLang) return 'en';
+  const l = vsLang.toLowerCase();
+  if (l.startsWith('it')) return 'it';
+  return 'en';
+}
+function T(key) { return LANGS[_lang]?.[key] ?? LANGS.en[key] ?? key; }
+function applyLang() {
+  document.documentElement.lang = _lang;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    const attr = el.dataset.i18nAttr;
+    const val = T(key);
+    if (typeof val === 'string') {
+      if (attr) el.setAttribute(attr, val);
+      else el.textContent = val;
+    }
+  });
+  // Re-render dynamic sections that depend on language
+  updateNoModelsBar();
+  const ta = document.getElementById('taskInput');
+  if (ta) ta.placeholder = T('taskPlaceholder');
+}
+
 // ── Messages in ───────────────────────────────────────────────
 window.addEventListener('message', ({ data }) => {
   switch (data.type) {
     case 'init':
       models = data.models; config = data.config; session = data.session;
+      if (data.language) _lang = _resolveVscodeLang(data.language);
       if (!Object.keys(sessionOverrides).length) sessionRunProfile = config?.runProfile || 'standard';
+      applyLang();
       updateSessionStrip();
       updateNoModelsBar();
       renderSettingsConfig();
@@ -539,6 +829,18 @@ window.addEventListener('message', ({ data }) => {
       toast('Configuration saved');
       closeSettings();
       break;
+    case 'microActionChunk':
+      appendMicroActionChunk(data.chunk);
+      break;
+    case 'microActionDone':
+      finishMicroAction(data.entry);
+      break;
+    case 'microActionError':
+      toast(data.message, true);
+      setMicroActionRunning(false);
+      document.getElementById('maResultMeta').textContent = T('maWarning')(data.message);
+      document.getElementById('maResultWrap').style.display = '';
+      break;
     case 'error':
       toast(data.message, true);
       appendError(data.message);
@@ -564,6 +866,11 @@ document.getElementById('btnCloseSessionConfig').onclick   = closeSessionConfig;
 document.getElementById('btnApplySessionConfig').onclick   = applySessionConfig;
 document.getElementById('btnResetSessionConfig').onclick   = resetSessionConfig;
 document.getElementById('btnResetLocalSettings').onclick   = resetLocalSettings;
+document.getElementById('btnOpenDocs').onclick             = () => vscode.postMessage({ type: 'openDocs' });
+document.getElementById('btnMicroAction').onclick          = openMicroAction;
+document.getElementById('btnCloseMicroAction').onclick     = closeMicroAction;
+document.getElementById('btnRunMicroAction').onclick       = runMicroAction;
+document.getElementById('btnCancelMicroAction').onclick    = () => vscode.postMessage({ type: 'cancelMicroAction' });
 
 taskInput.addEventListener('input', () => {
   autosize();
@@ -572,6 +879,8 @@ taskInput.addEventListener('input', () => {
 taskInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); run('new'); }
 });
+
+updateControls();
 
 function autosize() {
   taskInput.style.height = 'auto';
@@ -636,6 +945,7 @@ function makeCard(step) {
       <span class="step-si" id="si-\${step.id}"><span class="si-dot-pending"></span></span>
       <span class="step-label">\${escapeHtml(step.name || step.id)}</span>
       <div class="step-chips" id="chips-\${step.id}"></div>
+      <button class="btn-rerun" id="rerun-\${step.id}" title="Re-run this step" style="display:none" onclick="rerunStep(event, '\${step.id}')">↩</button>
       <span class="step-chevron" id="chev-\${step.id}">▾</span>
     </div>
     <div class="step-body" id="sb-\${step.id}">
@@ -653,6 +963,14 @@ function makeCard(step) {
   \`;
   el.querySelector('.step-card-header').addEventListener('click', () => toggleBody(step.id));
   return el;
+}
+
+function rerunStep(event, stepId) {
+  event.stopPropagation();
+  if (runState && !runState.finished && !runState.cancelled) {
+    toast('Stop the current run first.', true); return;
+  }
+  vscode.postMessage({ type: 'rerunStep', stepId });
 }
 
 function toggleBody(id) {
@@ -690,6 +1008,13 @@ function updateCard(step) {
     if (step.durationMs) parts.push(\`<span class="chip chip-time">\${(step.durationMs/1000).toFixed(1)}s</span>\`);
     if (step.tokensUsed) parts.push(\`<span class="chip chip-tokens">\${step.tokenUsage?.accounting === 'reported' ? '' : '≈'}\${fmtNum(step.tokensUsed)}t</span>\`);
     chips.innerHTML = parts.join('');
+  }
+
+  // Re-run button: visible only when step is done/error and no run is active
+  const rerunBtn = document.getElementById('rerun-' + step.id);
+  if (rerunBtn) {
+    const runActive = runState && !runState.finished && !runState.cancelled;
+    rerunBtn.style.display = (step.status === 'done' || step.status === 'error') && !runActive ? '' : 'none';
   }
 
   if (step.status === 'running') {
@@ -763,10 +1088,10 @@ function showBanner() {
   const totals = getRunTotals();
   const meta = formatTotalsMeta(totals);
   el.textContent = runState.cancelled
-    ? \`Run cancelled.\${meta}\`
+    ? T('runCancelled')(meta)
     : errors
-      ? \`Completed with \${errors} error\${errors > 1 ? 's' : ''}. \${done} step\${done !== 1 ? 's' : ''} succeeded.\${meta}\`
-      : \`✓ All \${done} step\${done !== 1 ? 's' : ''} completed successfully.\${meta}\`;
+      ? T('runErrors')(errors, done, meta)
+      : T('runCompleted')(done, meta);
   chat().appendChild(el);
   scrollBottom();
 }
@@ -791,8 +1116,9 @@ function updateNoModelsBar() {
   const bar = document.getElementById('noModelsBar');
   const noModels = !models.length || (models.length === 1 && models[0].id === '__none__');
   bar.classList.toggle('visible', noModels);
+  if (noModels) bar.textContent = T('noModels');
   const hint = document.getElementById('inputHint');
-  hint.textContent = noModels ? 'No models — install a CLI or add provider API keys in VS Code settings, then refresh' : '';
+  hint.textContent = noModels ? T('noModelsHint') : '';
 }
 
 // ── Controls ──────────────────────────────────────────────────
@@ -813,6 +1139,16 @@ function updateControls() {
   document.getElementById('btnResetLocalSettings').disabled = !!running || !config;
   document.getElementById('btnApplySessionConfig').disabled = !!running || !config;
   document.getElementById('btnResetSessionConfig').disabled = !!running || !config;
+  document.getElementById('btnMicroAction').disabled = !!running;
+
+  // Refresh re-run buttons visibility (depends on run active state)
+  document.querySelectorAll('[id^="rerun-"]').forEach(btn => {
+    const stepId = btn.id.replace('rerun-', '');
+    const step = runState?.steps?.find(s => s.id === stepId);
+    if (step) {
+      btn.style.display = (step.status === 'done' || step.status === 'error') && !running ? '' : 'none';
+    }
+  });
 }
 
 // ── Session config (per-run, not persisted) ───────────────────
@@ -834,6 +1170,8 @@ function renderSessionConfig() {
     ['lite', 'Lite'],
     ['standard', 'Standard'],
     ['full', 'Full'],
+    ['evolutive', 'Evolutive'],
+    ['hotfix', 'Hotfix'],
     ['custom', 'Custom'],
   ].map(([value, label]) => \`<option value="\${value}" \${sessionRunProfile === value ? 'selected' : ''}>\${label}</option>\`).join('');
   // Build effective state: config defaults merged with current sessionOverrides
@@ -882,7 +1220,7 @@ function renderSessionConfig() {
     const selected = profileSelect.value;
     const desc = document.getElementById('scRunProfileDesc');
     desc.textContent = selected === 'custom'
-      ? 'Custom keeps the current per-run step overrides as-is.'
+      ? T('customProfileDesc')
       : (runProfiles[selected]?.description || '');
   };
   profileSelect.onchange = () => {
@@ -936,6 +1274,8 @@ function closeSettings() { document.getElementById('settingsOverlay').classList.
 function renderSettingsConfig() {
   if (!config) return;
   renderStepsConfig();
+  renderModelRouterConfig();
+  renderGitContextConfig();
   renderRuntimeConfig();
 }
 
@@ -945,6 +1285,8 @@ function renderStepsConfig() {
     ['lite', 'Lite'],
     ['standard', 'Standard'],
     ['full', 'Full'],
+    ['evolutive', 'Evolutive'],
+    ['hotfix', 'Hotfix'],
     ['custom', 'Custom'],
   ].map(([value, label]) => \`<option value="\${value}" \${profile === value ? 'selected' : ''}>\${label}</option>\`).join('');
 
@@ -988,7 +1330,7 @@ function renderStepsConfig() {
     const selected = profileSelect.value;
     const desc = document.getElementById('cfgRunProfileDesc');
     desc.textContent = selected === 'custom'
-      ? 'Custom keeps the current enabled/disabled step toggles as-is.'
+      ? T('customProfileDescSettings')
       : (runProfiles[selected]?.description || '');
   };
   profileSelect.onchange = syncProfileDescription;
@@ -1001,20 +1343,56 @@ function toggleCfgStep(e, label) {
   toggleAccordion(label);
 }
 
+const STEP_CATEGORIES = ['planning', 'generation', 'review', 'verification', 'reporting'];
+
+function renderModelRouterConfig() {
+  const router = config.modelRouter || {};
+  document.getElementById('modelRouterConfig').innerHTML = STEP_CATEGORIES.map(cat => {
+    const currentModel = router[cat] || '';
+    const useStepLabel = _lang === 'it' ? '— usa modello dello step —' : '— use step model —';
+    const mOpts = \`<option value="">\${useStepLabel}</option>\` + renderModelOptions(currentModel);
+    return \`
+      <label class="cfg-field" style="margin-bottom:6px">
+        <span style="text-transform:capitalize">\${cat}</span>
+        <select class="router-model" data-category="\${cat}">\${mOpts}</select>
+      </label>\`;
+  }).join('');
+}
+
+function renderGitContextConfig() {
+  const gc = config.gitContext || {};
+  const enabled = gc.enabled !== false;
+  const maxTokens = gc.maxTokens ?? 500;
+  const commits = gc.recentCommits ?? 5;
+  document.getElementById('gitContextConfig').innerHTML = \`
+    <label class="cfg-field" style="flex-direction:row;align-items:center;gap:8px;margin-bottom:8px">
+      <input type="checkbox" id="gitCtxEnabled" \${enabled ? 'checked' : ''}/>
+      <span>\${T('gitContextEnabled')}</span>
+    </label>
+    <label class="cfg-field" style="margin-bottom:6px">\${T('gitContextMaxTokens')}
+      <input type="number" id="gitCtxMaxTokens" value="\${maxTokens}" min="100" max="2000" step="50" style="width:80px"/>
+    </label>
+    <label class="cfg-field">\${T('gitContextCommits')}
+      <input type="number" id="gitCtxCommits" value="\${commits}" min="1" max="20" step="1" style="width:60px"/>
+    </label>
+  \`;
+}
+
 function renderRuntimeConfig() {
   const runtime = config.runtime || {};
   const envFiles = (runtime.envFiles || []).join('\\n');
   const envEntries = Object.entries(runtime.env || {});
   document.getElementById('runtimeConfig').innerHTML = \`
-    <label class="cfg-field" style="margin-bottom:8px">Env files (one per line)
+    <label class="cfg-field" style="margin-bottom:8px">\${T('envFilesLabel')}
       <textarea id="runtimeEnvFiles" rows="2" style="font-family:var(--vsc-mono);font-size:11px" placeholder=".agentic-flow/runtime.env">\${escapeHtml(envFiles)}</textarea>
     </label>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:5px">Environment variables</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:5px">\${T('envVarsLabel')}</div>
     <div id="runtimeEnvList">\${
       (envEntries.length ? envEntries : [['','']]).map(([k,v]) => envRow(k,v)).join('')
     }</div>
     <button type="button" class="btn-tiny" id="btnAddEnv" style="margin-top:6px">+ Add variable</button>
   \`;
+  document.getElementById('btnAddEnv').textContent = T('addVariable');
   document.getElementById('btnAddEnv').onclick = () => {
     document.getElementById('runtimeEnvList').insertAdjacentHTML('beforeend', envRow('',''));
   };
@@ -1039,6 +1417,25 @@ function saveConfig() {
     step.skill       = el.querySelector('.cfg-skill').value;
     step.contextMode = el.querySelector('.cfg-context').value;
   });
+  // Model router
+  const router = {};
+  document.querySelectorAll('.router-model').forEach(sel => {
+    const cat = sel.dataset.category;
+    const val = sel.value;
+    if (cat && val) router[cat] = val;
+  });
+  config.modelRouter = router;
+  // Git context
+  const gitCtxEnabled = document.getElementById('gitCtxEnabled');
+  const gitCtxMaxTokens = document.getElementById('gitCtxMaxTokens');
+  const gitCtxCommits = document.getElementById('gitCtxCommits');
+  if (gitCtxEnabled) {
+    config.gitContext = config.gitContext || {};
+    config.gitContext.enabled   = gitCtxEnabled.checked;
+    config.gitContext.maxTokens = parseInt(gitCtxMaxTokens?.value || '500', 10) || 500;
+    config.gitContext.recentCommits = parseInt(gitCtxCommits?.value || '5', 10) || 5;
+  }
+  // Runtime
   config.runtime = config.runtime || {};
   const evf = document.getElementById('runtimeEnvFiles').value.trim();
   config.runtime.envFiles = evf ? evf.split('\\n').map(l => l.trim()).filter(Boolean) : [];
@@ -1067,6 +1464,61 @@ function applyProfilePresetToUi(profile, target = 'settings') {
   });
   if (target === 'session') sessionRunProfile = profile;
   toast(\`Applied \${profile} profile to \${target === 'session' ? 'next run' : 'step toggles'}\`);
+}
+
+// ── Micro-actions ─────────────────────────────────────────────
+function openMicroAction() {
+  // Populate model select with current models
+  const sel = document.getElementById('maModelSelect');
+  if (sel && models.length) {
+    sel.innerHTML = renderModelOptions(sel.value || models[0]?.id || '');
+  }
+  document.getElementById('maResult').textContent = '';
+  document.getElementById('maResultWrap').style.display = 'none';
+  document.getElementById('microActionOverlay').classList.add('open');
+}
+
+function closeMicroAction() {
+  document.getElementById('microActionOverlay').classList.remove('open');
+}
+
+function runMicroAction() {
+  const prompt = document.getElementById('maPrompt').value.trim();
+  if (!prompt) { toast('Enter an instruction first.', true); return; }
+  const modelId = document.getElementById('maModelSelect').value;
+  if (!modelId) { toast('Select a model first.', true); return; }
+  const includeContext = document.getElementById('maIncludeContext').checked;
+  // Clear previous result
+  document.getElementById('maResult').textContent = '';
+  document.getElementById('maResultMeta').textContent = T('maRunning');
+  document.getElementById('maResultWrap').style.display = '';
+  setMicroActionRunning(true);
+  vscode.postMessage({ type: 'runMicroAction', prompt, modelId, includeContext });
+}
+
+function appendMicroActionChunk(chunk) {
+  const el = document.getElementById('maResult');
+  el.textContent += chunk;
+  el.scrollTop = el.scrollHeight;
+}
+
+function finishMicroAction(entry) {
+  setMicroActionRunning(false);
+  const exact = entry.tokenUsage?.accounting === 'reported';
+  const tokens = entry.tokensUsed ? \`\${exact ? '' : '≈'}\${fmtNum(entry.tokensUsed)} tokens · \` : '';
+  const dur = fmtDuration(entry.durationMs);
+  document.getElementById('maResultMeta').textContent = T('maDone')(tokens, dur, entry.modelLabel);
+  const el = document.getElementById('maResult');
+  el.textContent = entry.output;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setMicroActionRunning(running) {
+  document.getElementById('btnRunMicroAction').disabled = running;
+  document.getElementById('btnCancelMicroAction').disabled = !running;
+  document.getElementById('maModelSelect').disabled = running;
+  document.getElementById('maIncludeContext').disabled = running;
+  document.getElementById('maPrompt').disabled = running;
 }
 
 // ── Utils ─────────────────────────────────────────────────────

@@ -3,8 +3,10 @@
 // ─────────────────────────────────────────────────────────────
 import * as fs from 'fs';
 import * as path from 'path';
-import type { AgenticFlowConfig, SessionState, StepConfig, StepFinding, StepOutputData, StepState } from './types';
-import { getStateFilePath, readSkill } from './configManager';
+import type { AgenticFlowConfig, GitContextSnapshot, SessionState, StepConfig, StepFinding, StepOutputData, StepState } from './types';
+import { getAgenticFlowDir, getStateFilePath, readSkill } from './configManager';
+import { getRepoMdPath } from './repoSummaryWriter';
+import { formatGitContextSection } from './gitUtils';
 
 const SECTION_SEP = '\n---\n';
 const STEP_HDR = (id: string, name: string, ts: string) => `## [${id}] ${name}  ·  ${ts}`;
@@ -68,8 +70,10 @@ export async function buildStepPrompt(opts: {
   completedSteps: StepState[];
   config: AgenticFlowConfig;
   workspaceRoot: string;
+  /** Git context captured once at run start. Undefined when no git repo detected. */
+  gitContext?: GitContextSnapshot;
 }): Promise<BuiltPrompt> {
-  const { step, task, session, completedSteps, config, workspaceRoot } = opts;
+  const { step, task, session, completedSteps, config, workspaceRoot, gitContext } = opts;
   const stateFile = getStateFilePath();
   const parts: string[] = [];
   const relevantCompletedSteps = filterRelevantCompletedSteps(step, completedSteps);
@@ -89,6 +93,20 @@ export async function buildStepPrompt(opts: {
     `Step goal: ${step.goal ?? step.id}`
   );
 
+  // ── 2b. REPO.md — project context from previous runs ─────────────────────────
+  // Injected only when the file exists. Aggressively truncated (600 tokens) since
+  // it is background context, not the primary input for this step.
+  const afDir = getAgenticFlowDir();
+  if (afDir) {
+    const repoMdPath = getRepoMdPath(afDir);
+    if (fs.existsSync(repoMdPath)) {
+      const repoContent = safeReadFile(repoMdPath);
+      if (repoContent) {
+        parts.push(`# PROJECT CONTEXT (REPO.md)\n\n${truncate(repoContent, 600)}`);
+      }
+    }
+  }
+
   // ── 3. Objective — current task ──────────────────────────────────────────────
   parts.push(`# OBJECTIVE\n\n${task}`);
 
@@ -97,6 +115,12 @@ export async function buildStepPrompt(opts: {
     `Workspace root: ${workspaceRoot}\n` +
     'You may create and modify files inside this workspace, including dot-directories such as `.github/` and `.agentic-flow/`, when the step requires it.'
   );
+
+  // ── 3b. Git context — injected once per run, only when repo is present ───────
+  if (gitContext?.isRepo) {
+    const gitSection = formatGitContextSection(gitContext);
+    if (gitSection) parts.push(gitSection);
+  }
 
   // ── 4. Requirement history — only prior iterations, not current ──────────────
   if (session.requirements.length > 1) {

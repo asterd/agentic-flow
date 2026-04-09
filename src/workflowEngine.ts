@@ -19,8 +19,11 @@ import type {
 import { buildStepPrompt, extractStructuredOutput, writeStepSummary } from './contextManager';
 import { runHardCheckStep } from './hardCheckRunner';
 import { runStep } from './stepRunner';
-import { resolveCliForModel, resolveModelSelection } from './cliDetector';
-import { getStateFilePath, loadSessionState, resolveRuntimeEnv, saveSessionState } from './configManager';
+import { resolveCliForModel, resolveModelForStep } from './cliDetector';
+import { getAgenticFlowDir, getStateFilePath, loadSessionState, resolveRuntimeEnv, saveSessionState } from './configManager';
+import { captureGitContext } from './gitUtils';
+import { writeRepoMd } from './repoSummaryWriter';
+import type { GitContextSnapshot } from './types';
 
 export type EngineEvent =
   | { type: 'stateChange'; state: WorkflowRunState }
@@ -99,6 +102,15 @@ export class WorkflowEngine {
     saveSessionState(this._session);
     this.emit({ type: 'sessionUpdated', session: this._session });
 
+    // Capture git context once for the whole run — safe, never throws
+    const gitCfg = config.gitContext;
+    const gitContext: GitContextSnapshot | undefined = (gitCfg?.enabled !== false)
+      ? await captureGitContext(this.workspaceRoot, {
+        maxTokens: gitCfg?.maxTokens,
+        recentCommits: gitCfg?.recentCommits,
+      })
+      : undefined;
+
     const stepStates: StepState[] = enabledSteps.map(step => ({
       id: step.id,
       name: step.name,
@@ -117,6 +129,7 @@ export class WorkflowEngine {
       finished: false,
       cancelled: false,
       title: this._session.title,
+      gitContext,
     };
 
     this.emit({ type: 'stateChange', state: this._state });
@@ -143,7 +156,7 @@ export class WorkflowEngine {
       this.emit({ type: 'stateChange', state: this._state });
 
       try {
-        await this.executeStep(step, stepState, completedStates, config);
+        await this.executeStep(step, stepState, completedStates, config, this._state.gitContext);
         stepState.status = 'done';
       } catch (err: any) {
         if (err.message === 'Cancelled') {
@@ -181,6 +194,61 @@ export class WorkflowEngine {
     }
   }
 
+  /**
+   * Re-run a single step from the last completed run.
+   * Prior step states are reconstructed from the session history so that
+   * the step's context prompt is built with the same inputs as the original run.
+   * The re-run result replaces the step state in-place and is persisted to session.
+   */
+  async rerunStep(stepId: string, config: AgenticFlowConfig): Promise<void> {
+    if (this.isRunning) throw new Error('A workflow run is already in progress');
+    if (!this._state) throw new Error('No previous run state to re-run from');
+
+    const stepIndex = this._state.steps.findIndex(s => s.id === stepId);
+    if (stepIndex < 0) throw new Error(`Step "${stepId}" not found in the current run`);
+
+    const stepConfig = config.steps.find(s => s.id === stepId);
+    if (!stepConfig) throw new Error(`Step "${stepId}" not found in config`);
+
+    this._cancelSource = new vscode.CancellationTokenSource();
+
+    // Mark step as running
+    const stepState = this._state.steps[stepIndex];
+    stepState.status = 'running';
+    stepState.startedAt = Date.now();
+    stepState.error = undefined;
+    stepState.output = undefined;
+    stepState.parsed = undefined;
+    stepState.filesChanged = undefined;
+    this._state.finished = false;
+    this._state.cancelled = false;
+    this._state.currentStepIndex = stepIndex;
+    this.emit({ type: 'stateChange', state: this._state });
+
+    // Completed states are the steps that ran BEFORE this one in the same run
+    const completedStates = this._state.steps
+      .slice(0, stepIndex)
+      .filter(s => s.status === 'done' || s.status === 'error');
+
+    try {
+      await this.executeStep(stepConfig, stepState, completedStates, config, this._state.gitContext);
+      stepState.status = 'done';
+    } catch (err: any) {
+      stepState.status = 'error';
+      stepState.error = String(err.message ?? err);
+      vscode.window.showErrorMessage(`[Agentic Flow] Re-run of "${stepConfig.name}" failed: ${stepState.error}`);
+    }
+
+    stepState.finishedAt = Date.now();
+    this._state.finished = true;
+    this.emit({ type: 'stateChange', state: this._state });
+
+    this.persistRunSummary();
+    this.emit({ type: 'sessionUpdated', session: this._session });
+    this.emit({ type: 'finished', state: this._state });
+    this._cancelSource = null;
+  }
+
   private prepareSession(task: string, mode: RunMode): SessionState {
     const now = Date.now();
     if (mode === 'continue' && this._session) {
@@ -213,10 +281,13 @@ export class WorkflowEngine {
     stepState: StepState,
     completedStates: StepState[],
     config: AgenticFlowConfig,
+    gitContext?: GitContextSnapshot,
   ): Promise<void> {
-    const modelSelection = step.model || config.defaultModel || '';
-    const model = resolveModelSelection(modelSelection, this.models);
-    if (!model) throw new Error(`Cannot resolve model "${modelSelection}". Check your config or provider settings.`);
+    const model = resolveModelForStep(step, config, this.models);
+    if (!model) {
+      const tried = step.model || (step.category && config.modelRouter?.[step.category]) || config.defaultModel || '(none)';
+      throw new Error(`Cannot resolve model "${tried}" for step "${step.id}". Check your config or provider settings.`);
+    }
     const cli = resolveCliForModel(model, this.clis);
     if (model.source === 'cli' && !cli) {
       throw new Error(`Cannot find CLI for model "${model.label}". Check your local installation.`);
@@ -237,6 +308,7 @@ export class WorkflowEngine {
       completedSteps: completedStates,
       config,
       workspaceRoot: this.workspaceRoot,
+      gitContext,
     });
 
     const result = step.executor === 'hard-check'
@@ -331,6 +403,10 @@ export class WorkflowEngine {
       runs: [...this._session.runs, runEntry].slice(-20),
     };
     saveSessionState(this._session);
+
+    // Write REPO.md to .agentic-flow/ — never throws
+    const afDir = getAgenticFlowDir();
+    if (afDir) writeRepoMd(this._session, afDir);
   }
 }
 

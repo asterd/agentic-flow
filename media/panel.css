@@ -275,8 +275,9 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .settings-overlay {
   position: absolute; inset: 34px 0 0 0; background: var(--bg); z-index: 50;
   display: flex; flex-direction: column; transform: translateX(100%); transition: transform 200ms ease;
+  pointer-events: none;
 }
-.settings-overlay.open { transform: translateX(0); }
+.settings-overlay.open { transform: translateX(0); pointer-events: auto; }
 .settings-header { display: flex; align-items: center; justify-content: space-between; padding: 0 10px; height: 34px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .settings-header-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .settings-body { flex: 1; overflow-y: auto; }
@@ -315,6 +316,8 @@ button:disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
 .icon-btn { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; background: transparent; color: var(--muted); border-radius: var(--r-sm); font-size: 13px; transition: background 60ms, color 60ms; }
 .icon-btn:hover { background: var(--surface2); color: var(--fg); }
 .icon-btn.active { color: var(--btn-bg); }
+.lang-toggle-btn { font-size: 10px; font-weight: 700; letter-spacing: .04em; width: auto; padding: 0 5px; }
+.lang-toggle-btn.active { color: var(--btn-bg); background: color-mix(in srgb, var(--btn-bg) 12%, transparent); }
 
 .btn-run { background: var(--btn-bg); color: var(--btn-fg); border-radius: var(--r-sm); font-size: 11.5px; font-weight: 600; padding: 4px 11px; transition: background 60ms; }
 .btn-run:hover { background: var(--btn-hover); }
@@ -324,6 +327,8 @@ button:disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
 
 .btn-stop { background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: var(--r-sm); font-size: 11.5px; padding: 4px 9px; transition: color 60ms, border-color 60ms; }
 .btn-stop:hover { color: var(--error); border-color: var(--error); }
+.btn-rerun { background: transparent; color: var(--muted); border: none; border-radius: var(--r-sm); font-size: 13px; padding: 0 4px; cursor: pointer; flex-shrink: 0; transition: color 60ms; margin-left: 2px; }
+.btn-rerun:hover { color: var(--accent); }
 
 .btn-primary-full { flex: 1 1 auto; width: 100%; background: var(--btn-bg); color: var(--btn-fg); border-radius: var(--r-sm); font-size: 12px; font-weight: 600; padding: 6px 12px; transition: background 60ms; }
 .btn-primary-full:hover { background: var(--btn-hover); }
