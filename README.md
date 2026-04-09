@@ -109,7 +109,7 @@ The new `🧭 Formal Pre-Check` step runs before implementation and is meant to 
 - logic gaps and sequencing errors
 - structural coupling that would make implementation brittle
 
-For UI-heavy tasks, prefer assigning the optional skill [ui-direction.md](/Users/ddurzo/Development/misc/agentic-flow/skills/ui-direction.md) to `architecture` or `formal-precheck` instead of adding a permanent extra step to every run.
+For UI-heavy tasks, prefer assigning the optional skill [ui-direction.md](./skills/ui-direction.md) to `architecture` or `formal-precheck` instead of adding a permanent extra step to every run.
 
 Current auto-detection order:
 

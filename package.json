@@ -4,6 +4,14 @@
   "description": "Multi-model AI development pipeline orchestrator. Spec → Plan → Build → Review → Test → Security → Done.",
   "version": "1.0.0",
   "publisher": "agentic-flow",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asterd/agentic-flow.git"
+  },
+  "homepage": "https://github.com/asterd/agentic-flow",
+  "bugs": {
+    "url": "https://github.com/asterd/agentic-flow/issues"
+  },
   "engines": {
     "vscode": "^1.95.0"
   },
