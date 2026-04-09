@@ -5,9 +5,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { AgenticFlowConfig, CliInfo, ExtToWebMsg, MicroActionEntry, ModelInfo, WebToExtMsg } from './types';
-import { RUN_PROFILE_PRESETS, ensureWorkspaceFile, getAgenticFlowDir, loadConfig, loadSessionState, resetLocalSettings, saveConfig, saveSessionState } from './configManager';
+import { RUN_PROFILE_PRESETS, createWorkspaceOverride, ensureWorkspaceFile, getAgenticFlowDir, getStorageInfo, initWorkspace, loadConfig, loadSessionState, resetLocalSettings, saveConfig, saveSessionState } from './configManager';
 import { WorkflowEngine } from './workflowEngine';
-import { resolveCliForModel, resolveModelSelection } from './cliDetector';
+import { getUsableModels, resolveCliForModel, resolveModelSelection } from './cliDetector';
 import { runStep } from './stepRunner';
 import { getRepoMdPath } from './repoSummaryWriter';
 import { randomUUID } from 'crypto';
@@ -80,7 +80,7 @@ export class AgenticFlowSidebarProvider implements vscode.WebviewViewProvider {
   private _sendInit() {
     const config = loadConfig();
     const session = this._engine?.currentSession ?? loadSessionState();
-    this._post({ type: 'init', models: this._models, config, session, language: vscode.env.language });
+    this._post({ type: 'init', models: this._models, config, session, language: vscode.env.language, storage: getStorageInfo() });
     if (this._engine?.currentState) {
       this._post({ type: 'runState', state: this._engine.currentState });
     }
@@ -92,8 +92,7 @@ export class AgenticFlowSidebarProvider implements vscode.WebviewViewProvider {
     switch (msg.type) {
       case 'ready':
         if (root) {
-          const { initWorkspace } = await import('./configManager');
-          await initWorkspace(this._models[0]?.id); // always ensure skills are present
+          await initWorkspace(getUsableModels(this._models));
           if (!this._engine) {
             const { WorkflowEngine: WE } = await import('./workflowEngine');
             this._engine = new WE(this._models, this._clis, root);
@@ -204,6 +203,19 @@ export class AgenticFlowSidebarProvider implements vscode.WebviewViewProvider {
           this._post({ type: 'error', message: String(err) });
         }
         break;
+      case 'createWorkspaceOverride':
+        if (this._engine?.isRunning) {
+          this._post({ type: 'error', message: 'Stop the current run before creating a workspace override.' });
+          return;
+        }
+        try {
+          await createWorkspaceOverride(getUsableModels(this._models));
+          this._engine?.reloadSession();
+          this._sendInit();
+        } catch (err) {
+          this._post({ type: 'error', message: String(err instanceof Error ? err.message : err) });
+        }
+        break;
       case 'refreshModels':
         vscode.commands.executeCommand('agenticFlow.refreshModels');
         break;
@@ -244,7 +256,7 @@ export class AgenticFlowSidebarProvider implements vscode.WebviewViewProvider {
           return;
         }
         try {
-          await resetLocalSettings(this._models[0]?.id);
+          await resetLocalSettings();
           this._engine?.reloadSession();
           this._sendInit();
           this._post({ type: 'sessionUpdated', session: null });
@@ -349,7 +361,7 @@ export class AgenticFlowPanel {
   private _sendInit() {
     this._config = loadConfig();
     const session = this._engine.currentSession ?? loadSessionState();
-    this._post({ type: 'init', models: this._models, config: this._config, session, language: vscode.env.language });
+    this._post({ type: 'init', models: this._models, config: this._config, session, language: vscode.env.language, storage: getStorageInfo() });
     if (this._engine.currentState) {
       this._post({ type: 'runState', state: this._engine.currentState });
     }
@@ -396,6 +408,19 @@ export class AgenticFlowPanel {
           this._post({ type: 'error', message: String(err) });
         }
         break;
+      case 'createWorkspaceOverride':
+        if (this._engine.isRunning) {
+          this._post({ type: 'error', message: 'Stop the current run before creating a workspace override.' });
+          return;
+        }
+        try {
+          await createWorkspaceOverride(getUsableModels(this._models));
+          this._engine.reloadSession();
+          this._sendInit();
+        } catch (err) {
+          this._post({ type: 'error', message: String(err instanceof Error ? err.message : err) });
+        }
+        break;
       case 'refreshModels':
         vscode.commands.executeCommand('agenticFlow.refreshModels');
         break;
@@ -435,7 +460,7 @@ export class AgenticFlowPanel {
           return;
         }
         try {
-          await resetLocalSettings(this._models[0]?.id);
+          await resetLocalSettings();
           this._engine.reloadSession();
           this._sendInit();
           this._post({ type: 'sessionUpdated', session: null });
@@ -604,9 +629,10 @@ function getWebviewHtml(
     <div class="settings-body">
       <div class="settings-section">
         <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
-          Persistent configuration now lives in the standard VS Code settings UI and in the workspace files under <code>.agentic-flow/</code>.
+          Persistent configuration lives in user storage by default. A workspace override is optional and takes precedence only when you create it explicitly.
         </div>
         <button class="btn-ghost" id="btnOpenSettingsUi" style="margin-bottom:10px">Open VS Code Settings</button>
+        <div id="storageStatus"></div>
       </div>
       <div class="settings-section">
         <div class="settings-section-title" data-i18n="pipelineSteps">Pipeline steps</div>
@@ -637,7 +663,7 @@ function getWebviewHtml(
 <script>
 const vscode = acquireVsCodeApi();
 const runProfiles = ${JSON.stringify(runProfiles)};
-let models = [], config = null, session = null, runState = null;
+let models = [], config = null, session = null, runState = null, storage = null;
 let sessionOverrides = {}; // { [stepId]: { enabled, model, skill } }
 let sessionRunProfile = 'custom';
 const stepLogs = {};
@@ -659,6 +685,13 @@ const LANGS = {
     applyClose: 'Apply & Close',
     reset: 'Reset',
     workspaceConfigTitle: 'Workspace Configuration',
+    storageModeTitle: 'Storage',
+    storageUser: 'Default user storage is active',
+    storageWorkspace: 'Workspace override is active',
+    createWorkspaceOverride: 'Create workspace override',
+    removeWorkspaceOverride: 'Remove workspace override',
+    storageOverrideHint: 'This creates a local .agentic-flow override for this workspace only.',
+    storageActivePath: 'Active path',
     workspaceConfigHint: 'Persistent configuration now lives in the standard VS Code settings UI and in the workspace files under',
     openVsCodeSettings: 'Open VS Code Settings',
     pipelineSteps: 'Pipeline steps',
@@ -680,6 +713,10 @@ const LANGS = {
     welcomeDesc: 'Orchestrate AI agents through your full development pipeline. Describe a task below to start.',
     noModels: 'No models detected. Install a local CLI or configure API providers in VS Code Settings, then click ↺.',
     noModelsHint: 'No models — install a CLI or add provider API keys in VS Code settings, then refresh',
+    missingAssignmentsHint: count => \`Enabled steps without a valid model: \${count}. Assign a model or use auto-assign before running.\`,
+    autoAssignModels: 'Auto-assign available models',
+    unsetModel: 'No model selected',
+    missingModel: value => \`Missing: \${value}\`,
     taskPlaceholder: 'Describe what to build or change…',
     runShortcut: '⌘↵ run',
     btnStop: '■ Stop',
@@ -718,6 +755,13 @@ const LANGS = {
     applyClose: 'Applica e Chiudi',
     reset: 'Ripristina',
     workspaceConfigTitle: 'Configurazione Workspace',
+    storageModeTitle: 'Storage',
+    storageUser: 'Attivo lo storage utente predefinito',
+    storageWorkspace: 'Attivo l override locale del workspace',
+    createWorkspaceOverride: 'Crea override locale',
+    removeWorkspaceOverride: 'Rimuovi override locale',
+    storageOverrideHint: 'Questo crea una cartella .agentic-flow locale solo per questo workspace.',
+    storageActivePath: 'Percorso attivo',
     workspaceConfigHint: 'La configurazione persistente si trova nelle impostazioni standard di VS Code e nei file workspace in',
     openVsCodeSettings: 'Apri Impostazioni VS Code',
     pipelineSteps: 'Step della pipeline',
@@ -739,6 +783,10 @@ const LANGS = {
     welcomeDesc: 'Orchestra agenti AI attraverso la tua pipeline di sviluppo completa. Descrivi un compito qui sotto per iniziare.',
     noModels: 'Nessun modello rilevato. Installa una CLI locale o configura i provider API nelle Impostazioni VS Code, poi clicca ↺.',
     noModelsHint: 'Nessun modello — installa una CLI o aggiungi chiavi API provider nelle impostazioni VS Code, poi aggiorna',
+    missingAssignmentsHint: count => \`Step attivi senza un modello valido: \${count}. Assegna un modello o usa l auto-assegnazione prima di avviare.\`,
+    autoAssignModels: 'Auto-assegna modelli disponibili',
+    unsetModel: 'Nessun modello selezionato',
+    missingModel: value => \`Mancante: \${value}\`,
     taskPlaceholder: 'Descrivi cosa costruire o modificare…',
     runShortcut: '⌘↵ avvia',
     btnStop: '■ Ferma',
@@ -792,7 +840,7 @@ function applyLang() {
 window.addEventListener('message', ({ data }) => {
   switch (data.type) {
     case 'init':
-      models = data.models; config = data.config; session = data.session;
+      models = data.models; config = data.config; session = data.session; storage = data.storage || null;
       if (data.language) _lang = _resolveVscodeLang(data.language);
       if (!Object.keys(sessionOverrides).length) sessionRunProfile = config?.runProfile || 'standard';
       applyLang();
@@ -1112,34 +1160,95 @@ function updateSessionStrip() {
   strip.classList.add('visible');
 }
 
+function usableModels() {
+  return (models || []).filter(model => model.id !== '__none__');
+}
+
+function resolveConfiguredModel(selection) {
+  if (!selection) return null;
+  return usableModels().find(model => model.id === selection || model.modelName === selection) || null;
+}
+
+function inferProviderHint(value) {
+  const text = String(value || '').toLowerCase();
+  if (!text) return '';
+  if (text.includes('claude') || text.includes('anthropic')) return 'anthropic';
+  if (text.includes('gpt') || text.includes('openai') || text.includes('codex')) return 'openai';
+  if (text.includes('grok') || text.includes('xai')) return 'xai';
+  if (text.includes('ollama')) return 'ollama';
+  if (text.includes('vscode')) return 'vscode';
+  return '';
+}
+
+function categoryPreferredProviders(category) {
+  switch (category) {
+    case 'review':
+    case 'reporting':
+      return ['openai', 'anthropic', 'xai', 'ollama', 'vscode'];
+    case 'planning':
+    case 'generation':
+    case 'verification':
+    default:
+      return ['anthropic', 'openai', 'xai', 'ollama', 'vscode'];
+  }
+}
+
+function recommendModelId(step, currentValue) {
+  const available = usableModels();
+  if (!available.length) return '';
+  const providerHint = inferProviderHint(currentValue || step?.model || '');
+  if (providerHint) {
+    const providerMatch = available.find(model => inferProviderHint(model.id) === providerHint || inferProviderHint(model.modelName) === providerHint);
+    if (providerMatch) return providerMatch.id;
+  }
+  const preferredProviders = categoryPreferredProviders(step?.category);
+  for (const provider of preferredProviders) {
+    const match = available.find(model => {
+      const haystack = \`\${model.providerId} \${model.providerLabel} \${model.source} \${model.sourceLabel} \${model.id} \${model.modelName}\`.toLowerCase();
+      return haystack.includes(provider);
+    });
+    if (match) return match.id;
+  }
+  return available[0]?.id || '';
+}
+
+function getMissingModelAssignments() {
+  if (!config?.steps?.length) return [];
+  return config.steps.filter(step => step.enabled && !resolveConfiguredModel(step.model));
+}
+
 function updateNoModelsBar() {
   const bar = document.getElementById('noModelsBar');
-  const noModels = !models.length || (models.length === 1 && models[0].id === '__none__');
-  bar.classList.toggle('visible', noModels);
+  const noModels = usableModels().length === 0;
+  const missingAssignments = getMissingModelAssignments().length;
+  const visible = noModels || missingAssignments > 0;
+  bar.classList.toggle('visible', visible);
   if (noModels) bar.textContent = T('noModels');
+  else if (missingAssignments > 0) bar.textContent = T('missingAssignmentsHint')(missingAssignments);
   const hint = document.getElementById('inputHint');
-  hint.textContent = noModels ? T('noModelsHint') : '';
+  hint.textContent = noModels ? T('noModelsHint') : visible ? T('missingAssignmentsHint')(missingAssignments) : '';
 }
 
 // ── Controls ──────────────────────────────────────────────────
 function updateControls() {
   const running = runState && !runState.finished && !runState.cancelled;
   const hasTask = !!taskInput.value.trim();
-  const hasModels = !!models.length && !(models.length === 1 && models[0].id === '__none__');
+  const hasModels = usableModels().length > 0;
+  const hasMissingAssignments = getMissingModelAssignments().length > 0;
 
   taskInput.disabled = !!running;
-  document.getElementById('btnStart').disabled    = !!running || !hasTask || !hasModels;
-  document.getElementById('btnContinue').disabled = !!running || !session || !hasTask || !hasModels;
+  document.getElementById('btnStart').disabled    = !!running || !hasTask || !hasModels || hasMissingAssignments;
+  document.getElementById('btnContinue').disabled = !!running || !session || !hasTask || !hasModels || hasMissingAssignments;
   document.getElementById('btnCancel').disabled   = !running;
   document.getElementById('btnNewSession').disabled = !!running;
   document.getElementById('btnTogglePipelineConfig').disabled = !!running || !config;
   document.getElementById('btnOpenSettings').disabled = !!running || !config;
   document.getElementById('btnRefreshModels').disabled = !!running;
   document.getElementById('btnSaveConfig').disabled = !!running || !config;
-  document.getElementById('btnResetLocalSettings').disabled = !!running || !config;
+  document.getElementById('btnResetLocalSettings').disabled = !!running || !config || !storage?.hasWorkspaceOverride;
   document.getElementById('btnApplySessionConfig').disabled = !!running || !config;
   document.getElementById('btnResetSessionConfig').disabled = !!running || !config;
-  document.getElementById('btnMicroAction').disabled = !!running;
+  document.getElementById('btnMicroAction').disabled = !!running || !hasModels;
 
   // Refresh re-run buttons visibility (depends on run active state)
   document.querySelectorAll('[id^="rerun-"]').forEach(btn => {
@@ -1186,6 +1295,7 @@ function renderSessionConfig() {
       <div id="scRunProfileDesc" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
       <div style="display:flex;gap:6px;margin-top:8px">
         <button type="button" class="btn-tiny" id="btnApplySessionProfile">Apply preset to this run</button>
+        <button type="button" class="btn-tiny" id="btnAutoAssignSessionModels">\${T('autoAssignModels')}</button>
       </div>
     </div>
     \` + config.steps.map((step, i) => {
@@ -1229,6 +1339,7 @@ function renderSessionConfig() {
   };
   syncProfileDescription();
   document.getElementById('btnApplySessionProfile').onclick = () => applyProfilePresetToUi(profileSelect.value, 'session');
+  document.getElementById('btnAutoAssignSessionModels').onclick = () => autoAssignSessionModels();
 }
 
 function toggleScStep(e, label) {
@@ -1250,7 +1361,7 @@ function applySessionConfig() {
     const skill   = el.querySelector('.sc-skill').value.trim();
     const ov = {};
     if (enabled !== step.enabled) ov.enabled = enabled;
-    if (model && model !== step.model) ov.model = model;
+    if (model !== (step.model || '')) ov.model = model;
     if (skill && skill !== (step.skill || '')) ov.skill = skill;
     if (Object.keys(ov).length) sessionOverrides[stepId] = ov;
   });
@@ -1273,10 +1384,29 @@ function closeSettings() { document.getElementById('settingsOverlay').classList.
 
 function renderSettingsConfig() {
   if (!config) return;
+  renderStorageConfig();
   renderStepsConfig();
   renderModelRouterConfig();
   renderGitContextConfig();
   renderRuntimeConfig();
+}
+
+function renderStorageConfig() {
+  const host = document.getElementById('storageStatus');
+  if (!host || !storage) return;
+  const activePath = storage.activeDir ? escapeHtml(storage.activeDir) : '';
+  host.innerHTML = \`
+    <div class="settings-section-title" style="margin-bottom:6px">\${T('storageModeTitle')}</div>
+    <div style="font-size:12px;margin-bottom:6px">\${storage.activeScope === 'workspace' ? T('storageWorkspace') : T('storageUser')}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px">\${T('storageActivePath')}: <code>\${activePath}</code></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button type="button" class="btn-tiny" id="btnCreateWorkspaceOverride" \${storage.hasWorkspaceOverride ? 'disabled' : ''}>\${T('createWorkspaceOverride')}</button>
+      <button type="button" class="btn-tiny" id="btnRemoveWorkspaceOverride" \${storage.hasWorkspaceOverride ? '' : 'disabled'}>\${T('removeWorkspaceOverride')}</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">\${T('storageOverrideHint')}</div>
+  \`;
+  document.getElementById('btnCreateWorkspaceOverride').onclick = createWorkspaceOverride;
+  document.getElementById('btnRemoveWorkspaceOverride').onclick = resetLocalSettings;
 }
 
 function renderStepsConfig() {
@@ -1298,6 +1428,7 @@ function renderStepsConfig() {
       <div id="cfgRunProfileDesc" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
       <div style="display:flex;gap:6px;margin-top:8px">
         <button type="button" class="btn-tiny" id="btnApplyRunProfile">Apply preset to step toggles</button>
+        <button type="button" class="btn-tiny" id="btnAutoAssignModels">\${T('autoAssignModels')}</button>
       </div>
     </div>
   \` + config.steps.map(step => {
@@ -1336,6 +1467,7 @@ function renderStepsConfig() {
   profileSelect.onchange = syncProfileDescription;
   syncProfileDescription();
   document.getElementById('btnApplyRunProfile').onclick = () => applyProfilePresetToUi(profileSelect.value);
+  document.getElementById('btnAutoAssignModels').onclick = () => autoAssignPersistentModels();
 }
 
 function toggleCfgStep(e, label) {
@@ -1350,7 +1482,7 @@ function renderModelRouterConfig() {
   document.getElementById('modelRouterConfig').innerHTML = STEP_CATEGORIES.map(cat => {
     const currentModel = router[cat] || '';
     const useStepLabel = _lang === 'it' ? '— usa modello dello step —' : '— use step model —';
-    const mOpts = \`<option value="">\${useStepLabel}</option>\` + renderModelOptions(currentModel);
+    const mOpts = \`<option value="">\${useStepLabel}</option>\` + renderModelOptionsWithOptions(currentModel, { includeBlank: false });
     return \`
       <label class="cfg-field" style="margin-bottom:6px">
         <span style="text-transform:capitalize">\${cat}</span>
@@ -1466,12 +1598,34 @@ function applyProfilePresetToUi(profile, target = 'settings') {
   toast(\`Applied \${profile} profile to \${target === 'session' ? 'next run' : 'step toggles'}\`);
 }
 
+function autoAssignPersistentModels() {
+  if (!config) return;
+  config.steps.forEach(step => {
+    step.model = resolveConfiguredModel(step.model)?.id || recommendModelId(step, step.model);
+  });
+  renderSettingsConfig();
+  updateNoModelsBar();
+  updateControls();
+}
+
+function autoAssignSessionModels() {
+  if (!config) return;
+  document.querySelectorAll('#scBody .cfg-step').forEach(el => {
+    const step = config.steps.find(item => item.id === el.dataset.stepId);
+    if (!step) return;
+    const select = el.querySelector('.sc-model');
+    const currentValue = select.value;
+    select.value = resolveConfiguredModel(currentValue)?.id || recommendModelId(step, currentValue);
+  });
+}
+
 // ── Micro-actions ─────────────────────────────────────────────
 function openMicroAction() {
   // Populate model select with current models
   const sel = document.getElementById('maModelSelect');
-  if (sel && models.length) {
-    sel.innerHTML = renderModelOptions(sel.value || models[0]?.id || '');
+  const available = usableModels();
+  if (sel && available.length) {
+    sel.innerHTML = renderModelOptionsWithOptions(sel.value || available[0]?.id || '', { includeBlank: false });
   }
   document.getElementById('maResult').textContent = '';
   document.getElementById('maResultWrap').style.display = 'none';
@@ -1529,11 +1683,19 @@ function newSession() {
   vscode.postMessage({ type: 'newSession' });
 }
 
+function createWorkspaceOverride() {
+  if (runState && !runState.finished && !runState.cancelled) {
+    toast('Stop the current run first.', true); return;
+  }
+  if (!window.confirm('Create a local .agentic-flow override for this workspace? It will take precedence over user storage.')) return;
+  vscode.postMessage({ type: 'createWorkspaceOverride' });
+}
+
 function resetLocalSettings() {
   if (runState && !runState.finished && !runState.cancelled) {
     toast('Stop the current run first.', true); return;
   }
-  if (!window.confirm('Reset local Agentic Flow settings for this workspace? This recreates .agentic-flow from defaults.')) return;
+  if (!window.confirm('Remove the local .agentic-flow override for this workspace? User storage will become active again.')) return;
   vscode.postMessage({ type: 'resetLocalSettings' });
 }
 
@@ -1556,12 +1718,25 @@ function shortModel(id) {
   return id.split('/').pop().split(':').pop();
 }
 function renderModelOptions(selectedValue) {
-  const grouped = models.reduce((acc, model) => {
+  return renderModelOptionsWithOptions(selectedValue, { includeBlank: true });
+}
+
+function renderModelOptionsWithOptions(selectedValue, options = {}) {
+  const includeBlank = options.includeBlank !== false;
+  const available = usableModels();
+  const grouped = available.reduce((acc, model) => {
     const key = model.sourceLabel || model.providerLabel || model.source || 'Other';
     (acc[key] ||= []).push(model);
     return acc;
   }, {});
-  return Object.entries(grouped).map(([group, items]) => {
+  const chunks = [];
+  if (includeBlank) {
+    chunks.push(\`<option value="">\${escapeHtml(T('unsetModel'))}</option>\`);
+  }
+  if (selectedValue && !resolveConfiguredModel(selectedValue)) {
+    chunks.push(\`<option value="\${escapeHtml(selectedValue)}" selected>\${escapeHtml(T('missingModel')(selectedValue))}</option>\`);
+  }
+  return chunks.join('') + Object.entries(grouped).map(([group, items]) => {
     const options = items.map(model => {
       const selected = modelMatchesSelection(model, selectedValue) ? 'selected' : '';
       return \`<option value="\${escapeHtml(model.id)}" \${selected}>\${escapeHtml(model.label)}</option>\`;

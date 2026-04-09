@@ -136,6 +136,14 @@ export interface AgenticFlowConfig {
   runtime?: RuntimeConfig;
 }
 
+export interface StorageInfo {
+  activeScope: 'user' | 'workspace';
+  activeDir?: string;
+  userDir?: string;
+  workspaceDir?: string;
+  hasWorkspaceOverride: boolean;
+}
+
 export interface RuntimeConfig {
   env?: Record<string, string>;
   envFiles?: string[];
@@ -280,7 +288,7 @@ export interface SessionState {
 }
 
 export type ExtToWebMsg =
-  | { type: 'init'; models: ModelInfo[]; config: AgenticFlowConfig; session: SessionState | null; language?: string }
+  | { type: 'init'; models: ModelInfo[]; config: AgenticFlowConfig; session: SessionState | null; language?: string; storage?: StorageInfo }
   | { type: 'runState'; state: WorkflowRunState }
   | { type: 'stepLog'; stepId: string; chunk: string }
   | { type: 'configSaved' }
@@ -331,5 +339,6 @@ export type WebToExtMsg =
   | { type: 'openSettingsUi' }
   | { type: 'newSession' }
   | { type: 'openSkillFile'; skillPath: string }
+  | { type: 'createWorkspaceOverride' }
   | { type: 'resetLocalSettings' }
   | { type: 'ready' };

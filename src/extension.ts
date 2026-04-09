@@ -2,8 +2,8 @@
 // extension.ts  –  VS Code Extension entry point
 // ─────────────────────────────────────────────────────────────
 import * as vscode from 'vscode';
-import { detectEnvironment } from './cliDetector';
-import { getAgenticFlowDir, getRuntimeEnvPath, getSkillsDir, getStorageDirSetting, initWorkspace, loadSessionState } from './configManager';
+import { detectEnvironment, getUsableModels, hasUsableModels } from './cliDetector';
+import { getAgenticFlowDir, getRuntimeEnvPath, getSkillsDir, getStorageDirSetting, getStorageInfo, initWorkspace, loadSessionState } from './configManager';
 import { writeRepoMd } from './repoSummaryWriter';
 import { getProviderDefinitions } from './providerConfig';
 import { deleteProviderApiKeySecret, initializeSecretStorage, setProviderApiKeySecret } from './secretStorage';
@@ -39,8 +39,13 @@ export async function activate(ctx: vscode.ExtensionContext) {
         vscode.window.showErrorMessage('[Agentic Flow] Open a workspace first.');
         return;
       }
-      await initWorkspace(_models[0]?.id);
+      await initWorkspace(getUsableModels(_models));
       ensureEngine(root);
+      if (!hasUsableModels(_models)) {
+        vscode.window.showWarningMessage(
+          '[Agentic Flow] No runnable models are configured yet. Add at least one provider API key or install a supported CLI, then refresh models.',
+        );
+      }
       // Focus the sidebar view
       vscode.commands.executeCommand('agenticFlow.panel.focus');
     }),
@@ -54,8 +59,9 @@ export async function activate(ctx: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('agenticFlow.initWorkspace', async () => {
-      await initWorkspace(_models[0]?.id);
-      vscode.window.showInformationMessage('[Agentic Flow] Workspace initialised – check .agentic-flow/');
+      await initWorkspace(getUsableModels(_models));
+      const storage = getStorageInfo();
+      vscode.window.showInformationMessage(`[Agentic Flow] User storage initialised at ${storage.userDir}.`);
     }),
 
     vscode.commands.registerCommand('agenticFlow.openSettings', async () => {
@@ -66,7 +72,7 @@ export async function activate(ctx: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('agenticFlow.openWorkspaceConfig', async () => {
-      await initWorkspace(_models[0]?.id);
+      await initWorkspace(getUsableModels(_models));
       const dir = getAgenticFlowDir();
       if (!dir) {
         vscode.window.showErrorMessage('[Agentic Flow] Open a workspace first.');
@@ -77,7 +83,7 @@ export async function activate(ctx: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('agenticFlow.openRuntimeEnv', async () => {
-      await initWorkspace(_models[0]?.id);
+      await initWorkspace(getUsableModels(_models));
       const runtimeEnvPath = getRuntimeEnvPath();
       if (!runtimeEnvPath) {
         vscode.window.showErrorMessage('[Agentic Flow] Open a workspace first.');
@@ -88,7 +94,7 @@ export async function activate(ctx: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand('agenticFlow.revealSkillsFolder', async () => {
-      await initWorkspace(_models[0]?.id);
+      await initWorkspace(getUsableModels(_models));
       const skillsDir = getSkillsDir();
       if (!skillsDir) {
         vscode.window.showErrorMessage('[Agentic Flow] Open a workspace first.');
@@ -168,6 +174,7 @@ async function refreshEnvironment() {
   const env = await detectEnvironment();
   _clis = env.clis;
   _models = env.models;
+  await initWorkspace(getUsableModels(_models));
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (root) ensureEngine(root);
 }

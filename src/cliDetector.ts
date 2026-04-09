@@ -74,6 +74,14 @@ export interface DetectedEnvironment {
   models: ModelInfo[];
 }
 
+export function getUsableModels(models: ModelInfo[]): ModelInfo[] {
+  return models.filter(model => model.id !== '__none__');
+}
+
+export function hasUsableModels(models: ModelInfo[]): boolean {
+  return getUsableModels(models).length > 0;
+}
+
 export async function detectEnvironment(): Promise<DetectedEnvironment> {
   const config = loadConfig();
   const clis: CliInfo[] = [];

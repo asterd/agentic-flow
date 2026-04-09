@@ -19,7 +19,7 @@ import type {
 import { buildStepPrompt, extractStructuredOutput, writeStepSummary } from './contextManager';
 import { runHardCheckStep } from './hardCheckRunner';
 import { runStep } from './stepRunner';
-import { resolveCliForModel, resolveModelForStep } from './cliDetector';
+import { getUsableModels, resolveCliForModel, resolveModelForStep } from './cliDetector';
 import { getAgenticFlowDir, getStateFilePath, loadSessionState, resolveRuntimeEnv, saveSessionState } from './configManager';
 import { captureGitContext } from './gitUtils';
 import { writeRepoMd } from './repoSummaryWriter';
@@ -86,6 +86,9 @@ export class WorkflowEngine {
 
   async start(task: string, config: AgenticFlowConfig, mode: RunMode, stepOverrides?: import('./types').StepOverride[]): Promise<void> {
     if (this.isRunning) throw new Error('A workflow run is already in progress');
+    if (!getUsableModels(this.models).length) {
+      throw new Error('No runnable models are configured. Add a provider API key or install a supported CLI, then refresh models.');
+    }
 
     // Apply per-run step overrides (session-local, not persisted)
     const effectiveSteps = config.steps.map(step => {
@@ -96,6 +99,10 @@ export class WorkflowEngine {
 
     const enabledSteps = effectiveSteps.filter(step => step.enabled);
     if (enabledSteps.length === 0) throw new Error('No steps enabled in config');
+    const unresolved = enabledSteps.filter(step => !resolveModelForStep(step, { ...config, steps: effectiveSteps }, this.models));
+    if (unresolved.length) {
+      throw new Error(`Enabled steps without a valid model: ${unresolved.map(step => step.name || step.id).join(', ')}.`);
+    }
 
     this._cancelSource = new vscode.CancellationTokenSource();
     this._session = this.prepareSession(task, mode);

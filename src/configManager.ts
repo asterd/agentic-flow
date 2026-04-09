@@ -2,11 +2,14 @@
 // configManager.ts  –  Load, validate and persist config
 // ─────────────────────────────────────────────────────────────
 import * as vscode from 'vscode';
+import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { AgenticFlowConfig, GitContextConfig, ModelRouter, RunProfileId, RuntimeConfig, SessionState, StepConfig } from './types';
+import { createHash } from 'crypto';
+import type { AgenticFlowConfig, GitContextConfig, ModelInfo, ModelRouter, RunProfileId, RuntimeConfig, SessionState, StepCategory, StepConfig, StorageInfo } from './types';
 
 const DEFAULT_STORAGE_DIR = '.agentic-flow';
+const USER_STORAGE_HOME_DIR = '.agentic-flow';
 const CONFIG_BASENAME = 'config.json';
 const STATE_BASENAME = 'WORKFLOW_STATE.md';
 const SESSION_BASENAME = 'session.json';
@@ -197,8 +200,8 @@ export const DEFAULT_CONFIG: AgenticFlowConfig = {
   version: '2.0',
   runProfile: 'standard',
   steps: DEFAULT_STEPS,
-  stateFile: path.join(DEFAULT_STORAGE_DIR, STATE_BASENAME),
-  sessionFile: path.join(DEFAULT_STORAGE_DIR, SESSION_BASENAME),
+  stateFile: STATE_BASENAME,
+  sessionFile: SESSION_BASENAME,
   summaryMaxTokens: 250,
   contextMaxTokens: 1400,
   // Model router: maps step categories to model IDs.
@@ -213,7 +216,7 @@ export const DEFAULT_CONFIG: AgenticFlowConfig = {
   },
   runtime: {
     env: {},
-    envFiles: [path.join(DEFAULT_STORAGE_DIR, RUNTIME_ENV_BASENAME)],
+    envFiles: [RUNTIME_ENV_BASENAME],
     customClis: [],
     customModels: [],
   },
@@ -228,22 +231,59 @@ export function getWorkspaceRoot(): string | undefined {
 }
 
 function configPath(): string | undefined {
-  const dir = getAgenticFlowDir();
+  const dir = getActiveStorageDir();
   return dir ? path.join(dir, CONFIG_BASENAME) : undefined;
 }
 
 export function getAgenticFlowDir(): string | undefined {
+  return getActiveStorageDir();
+}
+
+export function getWorkspaceOverrideDir(): string | undefined {
   const root = workspaceRoot();
   return root ? path.join(root, getStorageDirSetting()) : undefined;
 }
 
+export function getUserStorageDir(): string | undefined {
+  const root = workspaceRoot();
+  if (!root) return undefined;
+  const home = os.homedir();
+  const workspaceName = path.basename(root).replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'workspace';
+  const workspaceHash = createHash('sha1').update(path.resolve(root)).digest('hex').slice(0, 12);
+  return path.join(home, USER_STORAGE_HOME_DIR, 'workspaces', `${workspaceName}-${workspaceHash}`);
+}
+
+export function getActiveStorageDir(): string | undefined {
+  const workspaceDir = getWorkspaceOverrideDir();
+  if (workspaceDir && fs.existsSync(path.join(workspaceDir, CONFIG_BASENAME))) return workspaceDir;
+  return getUserStorageDir();
+}
+
+export function hasWorkspaceOverride(): boolean {
+  const workspaceDir = getWorkspaceOverrideDir();
+  return Boolean(workspaceDir && fs.existsSync(path.join(workspaceDir, CONFIG_BASENAME)));
+}
+
+export function getStorageInfo(): StorageInfo {
+  const userDir = getUserStorageDir();
+  const workspaceDir = getWorkspaceOverrideDir();
+  const hasLocal = hasWorkspaceOverride();
+  return {
+    activeScope: hasLocal ? 'workspace' : 'user',
+    activeDir: hasLocal ? workspaceDir : userDir,
+    userDir,
+    workspaceDir,
+    hasWorkspaceOverride: hasLocal,
+  };
+}
+
 export function getSkillsDir(): string | undefined {
-  const dir = getAgenticFlowDir();
+  const dir = getActiveStorageDir();
   return dir ? path.join(dir, SKILLS_DIRNAME) : undefined;
 }
 
 export function getRuntimeEnvPath(): string | undefined {
-  const dir = getAgenticFlowDir();
+  const dir = getActiveStorageDir();
   return dir ? path.join(dir, RUNTIME_ENV_BASENAME) : undefined;
 }
 
@@ -287,9 +327,9 @@ function mergeConfigSources(
       ...DEFAULT_CONFIG.runtime,
       ...fileConfig?.runtime,
       ...vscodeOverrides.runtime,
-      envFiles: vscodeOverrides.runtime?.envFiles ?? fileConfig?.runtime?.envFiles ?? [],
-      customClis: vscodeOverrides.runtime?.customClis ?? fileConfig?.runtime?.customClis ?? [],
-      customModels: vscodeOverrides.runtime?.customModels ?? fileConfig?.runtime?.customModels ?? [],
+      envFiles: vscodeOverrides.runtime?.envFiles ?? fileConfig?.runtime?.envFiles ?? DEFAULT_CONFIG.runtime?.envFiles ?? [],
+      customClis: vscodeOverrides.runtime?.customClis ?? fileConfig?.runtime?.customClis ?? DEFAULT_CONFIG.runtime?.customClis ?? [],
+      customModels: vscodeOverrides.runtime?.customModels ?? fileConfig?.runtime?.customModels ?? DEFAULT_CONFIG.runtime?.customModels ?? [],
       env: {
         ...DEFAULT_CONFIG.runtime?.env,
         ...fileConfig?.runtime?.env,
@@ -353,30 +393,23 @@ export function applyRunProfileToSteps(steps: StepConfig[], profile: RunProfileI
 }
 
 export function saveConfig(config: AgenticFlowConfig): void {
-  const dir = getAgenticFlowDir();
+  const dir = getActiveStorageDir();
   if (!dir) throw new Error('No workspace open');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const p = path.join(dir, CONFIG_BASENAME);
   fs.writeFileSync(p, JSON.stringify({ ...config, runProfile: normalizeRunProfile(config.runProfile) }, null, 2), 'utf8');
 }
 
-export async function initWorkspace(defaultModel?: string): Promise<void> {
-  const dir = getAgenticFlowDir();
-  const skillsDir = getSkillsDir();
+export async function initWorkspace(availableModels: ModelInfo[] = []): Promise<void> {
+  const dir = getUserStorageDir();
+  const skillsDir = dir ? path.join(dir, SKILLS_DIRNAME) : undefined;
   if (!dir || !skillsDir) return;
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
 
   const cp = path.join(dir, CONFIG_BASENAME);
   if (!fs.existsSync(cp)) {
-    const cfg = structuredClone(DEFAULT_CONFIG);
-    if (defaultModel) {
-      cfg.defaultModel = defaultModel;
-      cfg.steps = cfg.steps.map((step, index) => ({
-        ...step,
-        model: index === 0 && !step.model ? defaultModel : step.model || defaultModel,
-      }));
-    }
+    const cfg = buildInitialConfig(availableModels);
     fs.writeFileSync(cp, JSON.stringify(cfg, null, 2), 'utf8');
   }
 
@@ -409,13 +442,51 @@ export async function initWorkspace(defaultModel?: string): Promise<void> {
   }
 }
 
+export async function createWorkspaceOverride(availableModels: ModelInfo[] = []): Promise<void> {
+  const dir = getWorkspaceOverrideDir();
+  const skillsDir = dir ? path.join(dir, SKILLS_DIRNAME) : undefined;
+  if (!dir || !skillsDir) throw new Error('No workspace open');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
+
+  const userDir = getUserStorageDir();
+  const userConfigPath = userDir ? path.join(userDir, CONFIG_BASENAME) : undefined;
+  const workspaceConfigPath = path.join(dir, CONFIG_BASENAME);
+  if (!fs.existsSync(workspaceConfigPath)) {
+    if (userConfigPath && fs.existsSync(userConfigPath)) {
+      fs.copyFileSync(userConfigPath, workspaceConfigPath);
+    } else {
+      fs.writeFileSync(workspaceConfigPath, JSON.stringify(buildInitialConfig(availableModels), null, 2), 'utf8');
+    }
+  }
+
+  const userRuntimePath = userDir ? path.join(userDir, RUNTIME_ENV_BASENAME) : undefined;
+  const workspaceRuntimePath = path.join(dir, RUNTIME_ENV_BASENAME);
+  if (!fs.existsSync(workspaceRuntimePath)) {
+    if (userRuntimePath && fs.existsSync(userRuntimePath)) {
+      fs.copyFileSync(userRuntimePath, workspaceRuntimePath);
+    } else {
+      writeRuntimeEnvTemplate(workspaceRuntimePath);
+    }
+  }
+
+  const sourceSkillsDir = userDir && fs.existsSync(path.join(userDir, SKILLS_DIRNAME))
+    ? path.join(userDir, SKILLS_DIRNAME)
+    : undefined;
+  copySkillsTemplate(skillsDir, sourceSkillsDir);
+}
+
 export function resolveSkillPath(skillPath: string): string | undefined {
   if (!skillPath) return undefined;
   if (path.isAbsolute(skillPath)) return fs.existsSync(skillPath) ? skillPath : undefined;
-  const root = workspaceRoot();
-  if (!root) return undefined;
-  const abs = path.join(root, skillPath);
-  return fs.existsSync(abs) ? abs : undefined;
+  const activeDir = getActiveStorageDir();
+  const normalized = normalizeStorageRelativePath(skillPath);
+  const candidates = [
+    activeDir && path.join(activeDir, normalized),
+    activeDir && path.join(activeDir, skillPath),
+    workspaceRoot() && path.join(workspaceRoot()!, skillPath),
+  ].filter(Boolean) as string[];
+  return candidates.find(candidate => fs.existsSync(candidate));
 }
 
 export function resolveWorkspacePath(targetPath: string): string | undefined {
@@ -435,33 +506,28 @@ export function readSkill(skillPath: string): string {
 }
 
 export function ensureWorkspaceFile(targetPath: string, initialContent = ''): string {
-  const abs = resolveWorkspacePath(targetPath);
-  if (!abs) throw new Error('Path must stay inside the current workspace.');
+  const abs = resolveManagedPath(targetPath);
+  if (!abs) throw new Error('Path must stay inside the current workspace or Agentic Flow storage.');
   const dir = path.dirname(abs);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   if (!fs.existsSync(abs)) fs.writeFileSync(abs, initialContent, 'utf8');
   return abs;
 }
 
-export async function resetLocalSettings(defaultModel?: string): Promise<void> {
-  const dir = getAgenticFlowDir();
+export async function resetLocalSettings(): Promise<void> {
+  const dir = getWorkspaceOverrideDir();
   if (!dir) throw new Error('No workspace open');
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
-  await initWorkspace(defaultModel);
 }
 
 export function getStateFilePath(): string | undefined {
-  const root = workspaceRoot();
-  if (!root) return undefined;
   const cfg = loadConfig();
-  return path.join(root, cfg.stateFile ?? path.join(getStorageDirSetting(), STATE_BASENAME));
+  return resolveStorageScopedPath(cfg.stateFile, STATE_BASENAME);
 }
 
 export function getSessionFilePath(): string | undefined {
-  const root = workspaceRoot();
-  if (!root) return undefined;
   const cfg = loadConfig();
-  return path.join(root, cfg.sessionFile ?? path.join(getStorageDirSetting(), SESSION_BASENAME));
+  return resolveStorageScopedPath(cfg.sessionFile, SESSION_BASENAME);
 }
 
 export function loadSessionState(): SessionState | null {
@@ -483,11 +549,10 @@ export function saveSessionState(session: SessionState): void {
 }
 
 export function resolveRuntimeEnv(config: AgenticFlowConfig): Record<string, string> {
-  const root = workspaceRoot();
   const resolved: Record<string, string> = {};
 
   for (const envFile of config.runtime?.envFiles ?? []) {
-    const abs = root && !path.isAbsolute(envFile) ? path.join(root, envFile) : envFile;
+    const abs = resolveStorageScopedPath(envFile, RUNTIME_ENV_BASENAME);
     if (!abs || !fs.existsSync(abs)) continue;
     const lines = fs.readFileSync(abs, 'utf8').split(/\r?\n/);
     for (const line of lines) {
@@ -508,4 +573,135 @@ export function resolveRuntimeEnv(config: AgenticFlowConfig): Record<string, str
 export function getStorageDirSetting(): string {
   const configured = vscode.workspace.getConfiguration('agenticFlow').get<string>('workspaceStorageDir', DEFAULT_STORAGE_DIR)?.trim();
   return configured || DEFAULT_STORAGE_DIR;
+}
+
+function buildInitialConfig(availableModels: ModelInfo[]): AgenticFlowConfig {
+  const cfg = structuredClone(DEFAULT_CONFIG);
+  const sanitizedModels = availableModels.filter(model => model.id !== '__none__');
+  cfg.defaultModel = chooseRecommendedModel(sanitizedModels, 'generation')?.id;
+  cfg.steps = cfg.steps.map(step => ({
+    ...step,
+    model: chooseRecommendedModel(sanitizedModels, step.category, step.model)?.id || '',
+    skill: normalizeStorageRelativePath(step.skill || ''),
+  }));
+  return cfg;
+}
+
+function chooseRecommendedModel(models: ModelInfo[], category?: StepCategory, preferredSelection?: string): ModelInfo | undefined {
+  if (!models.length) return undefined;
+
+  const preferredProvider = inferProviderHint(preferredSelection);
+  if (preferredProvider) {
+    const exactProvider = models.find(model => inferProviderHint(model.id) === preferredProvider || inferProviderHint(model.modelName) === preferredProvider);
+    if (exactProvider) return exactProvider;
+  }
+
+  const categoryPreference = categoryPreferredProviders(category);
+  for (const provider of categoryPreference) {
+    const match = models.find(model => providerMatches(model, provider));
+    if (match) return match;
+  }
+
+  return models[0];
+}
+
+function categoryPreferredProviders(category?: StepCategory): string[] {
+  switch (category) {
+    case 'review':
+    case 'reporting':
+      return ['openai', 'anthropic', 'xai', 'ollama', 'vscode'];
+    case 'planning':
+    case 'generation':
+    case 'verification':
+    default:
+      return ['anthropic', 'openai', 'xai', 'ollama', 'vscode'];
+  }
+}
+
+function providerMatches(model: ModelInfo, provider: string): boolean {
+  const haystack = `${model.providerId} ${model.providerLabel} ${model.source} ${model.sourceLabel} ${model.id} ${model.modelName}`.toLowerCase();
+  return haystack.includes(provider.toLowerCase());
+}
+
+function inferProviderHint(selection?: string): string | undefined {
+  const value = selection?.toLowerCase() || '';
+  if (!value) return undefined;
+  if (value.includes('claude') || value.includes('anthropic')) return 'anthropic';
+  if (value.includes('gpt') || value.includes('openai') || value.includes('codex')) return 'openai';
+  if (value.includes('grok') || value.includes('xai')) return 'xai';
+  if (value.includes('ollama')) return 'ollama';
+  if (value.includes('vscode')) return 'vscode';
+  return undefined;
+}
+
+function writeRuntimeEnvTemplate(filePath: string): void {
+  fs.writeFileSync(
+    filePath,
+    '# Runtime environment for Agentic Flow\n' +
+    '# Put API keys or local-provider URLs here when a step cannot rely on local CLI auth.\n' +
+    '# OPENAI_API_KEY=\n' +
+    '# ANTHROPIC_API_KEY=\n' +
+    '# OPENAI_BASE_URL=http://localhost:11434/v1\n',
+    'utf8',
+  );
+}
+
+function copySkillsTemplate(destinationDir: string, sourceSkillsDir?: string): void {
+  if (sourceSkillsDir && fs.existsSync(sourceSkillsDir)) {
+    for (const file of fs.readdirSync(sourceSkillsDir)) {
+      const dest = path.join(destinationDir, file);
+      if (!fs.existsSync(dest)) fs.copyFileSync(path.join(sourceSkillsDir, file), dest);
+    }
+    return;
+  }
+
+  const ext = vscode.extensions.getExtension('agentic-flow.agentic-flow');
+  const extPath = ext?.extensionPath ?? path.join(__dirname, '..');
+  const tmplDir = fs.existsSync(path.join(extPath, 'skills'))
+    ? path.join(extPath, 'skills')
+    : path.join(extPath, 'templates', 'skills');
+  if (!fs.existsSync(tmplDir)) return;
+  for (const file of fs.readdirSync(tmplDir)) {
+    const dest = path.join(destinationDir, file);
+    if (!fs.existsSync(dest)) fs.copyFileSync(path.join(tmplDir, file), dest);
+  }
+}
+
+function normalizeStorageRelativePath(targetPath: string): string {
+  const trimmed = targetPath.trim();
+  if (!trimmed || path.isAbsolute(trimmed)) return trimmed;
+  const configuredDir = getStorageDirSetting().replace(/\\/g, '/');
+  const normalized = trimmed.replace(/\\/g, '/');
+  if (normalized === DEFAULT_STORAGE_DIR || normalized === configuredDir) return '';
+  if (normalized.startsWith(`${DEFAULT_STORAGE_DIR}/`)) return normalized.slice(DEFAULT_STORAGE_DIR.length + 1);
+  if (normalized.startsWith(`${configuredDir}/`)) return normalized.slice(configuredDir.length + 1);
+  return normalized;
+}
+
+function resolveStorageScopedPath(targetPath: string | undefined, fallbackBasename: string): string | undefined {
+  const activeDir = getActiveStorageDir();
+  if (!activeDir) return undefined;
+  const value = targetPath?.trim();
+  if (!value) return path.join(activeDir, fallbackBasename);
+  if (path.isAbsolute(value)) return value;
+  return path.join(activeDir, normalizeStorageRelativePath(value) || fallbackBasename);
+}
+
+function resolveManagedPath(targetPath: string): string | undefined {
+  if (!targetPath) return undefined;
+  if (path.isAbsolute(targetPath)) {
+    const activeDir = getActiveStorageDir();
+    const workspace = workspaceRoot();
+    const resolved = path.resolve(targetPath);
+    const allowedRoots = [activeDir, workspace].filter(Boolean).map(root => path.resolve(root!));
+    return allowedRoots.some(root => resolved === root || resolved.startsWith(`${root}${path.sep}`)) ? resolved : undefined;
+  }
+  const activeDir = getActiveStorageDir();
+  const normalized = normalizeStorageRelativePath(targetPath);
+  if (activeDir) {
+    const insideStorage = path.resolve(path.join(activeDir, normalized));
+    const storageRoot = path.resolve(activeDir);
+    if (insideStorage === storageRoot || insideStorage.startsWith(`${storageRoot}${path.sep}`)) return insideStorage;
+  }
+  return resolveWorkspacePath(targetPath);
 }
