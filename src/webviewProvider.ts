@@ -1213,8 +1213,20 @@ function recommendModelId(step, currentValue) {
 }
 
 function getMissingModelAssignments() {
+  return getEffectiveSteps().filter(step => step.enabled && !resolveConfiguredModel(step.model));
+}
+
+function getEffectiveSteps() {
   if (!config?.steps?.length) return [];
-  return config.steps.filter(step => step.enabled && !resolveConfiguredModel(step.model));
+  return config.steps.map(step => {
+    const ov = sessionOverrides[step.id] || {};
+    return {
+      ...step,
+      enabled: ov.enabled !== undefined ? ov.enabled : step.enabled,
+      model: ov.model !== undefined ? ov.model : step.model,
+      skill: ov.skill !== undefined ? ov.skill : step.skill,
+    };
+  });
 }
 
 function updateNoModelsBar() {
@@ -1301,7 +1313,7 @@ function renderSessionConfig() {
     \` + config.steps.map((step, i) => {
     const ov = sessionOverrides[step.id] || {};
     const enabled = ov.enabled !== undefined ? ov.enabled : step.enabled;
-    const model   = ov.model || step.model || '';
+    const model   = ov.model !== undefined ? ov.model : (step.model || '');
     const skill   = ov.skill !== undefined ? ov.skill : (step.skill || '');
     const mOpts   = renderModelOptions(model);
     return \`
@@ -1367,6 +1379,8 @@ function applySessionConfig() {
   });
   const count = Object.keys(sessionOverrides).length;
   closeSessionConfig();
+  updateNoModelsBar();
+  updateControls();
   toast(count ? \`\${count} step override\${count > 1 ? 's' : ''} active for next run\` : 'No overrides — using global config');
 }
 
@@ -1375,6 +1389,8 @@ function resetSessionConfig() {
   sessionRunProfile = 'custom';
   renderSessionConfig();
   syncSessionOverrideButton(true);
+  updateNoModelsBar();
+  updateControls();
   toast('Overrides cleared');
 }
 
@@ -1617,6 +1633,7 @@ function autoAssignSessionModels() {
     const currentValue = select.value;
     select.value = resolveConfiguredModel(currentValue)?.id || recommendModelId(step, currentValue);
   });
+  applySessionConfig();
 }
 
 // ── Micro-actions ─────────────────────────────────────────────

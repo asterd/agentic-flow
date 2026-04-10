@@ -94,7 +94,12 @@ export class WorkflowEngine {
     const effectiveSteps = config.steps.map(step => {
       const ov = stepOverrides?.find(o => o.id === step.id);
       if (!ov) return step;
-      return { ...step, ...(ov.enabled !== undefined && { enabled: ov.enabled }), ...(ov.model && { model: ov.model }), ...(ov.skill && { skill: ov.skill }) };
+      return {
+        ...step,
+        ...(ov.enabled !== undefined && { enabled: ov.enabled }),
+        ...(ov.model !== undefined && { model: ov.model }),
+        ...(ov.skill && { skill: ov.skill }),
+      };
     });
 
     const enabledSteps = effectiveSteps.filter(step => step.enabled);
