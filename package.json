@@ -2,7 +2,7 @@
   "name": "agentic-flow",
   "displayName": "Agentic Flow",
   "description": "Multi-model AI development pipeline orchestrator. Spec → Plan → Build → Review → Test → Security → Done.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "agentic-flow",
   "repository": {
     "type": "git",
